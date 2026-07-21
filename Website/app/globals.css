@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(calc(-100% - 64px));
+  }
+}
+
+@layer utilities {
+  .animation-marquee {
+    animation: marquee 25s linear infinite;
+  }
+}
+
+:root {
+  color-scheme: light;
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+body {
+  @apply min-h-screen bg-slate-50 text-slate-900 antialiased;
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  @apply text-slate-900 no-underline;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+img {
+  @apply block max-w-full h-auto;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}

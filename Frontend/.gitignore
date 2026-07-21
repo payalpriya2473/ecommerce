@@ -1,0 +1,81 @@
+# Node modules
+node_modules/
+
+#scripts
+scripts/
+
+# Build output
+.next/
+out/
+dist/
+.next-static/
+.next/cache/
+
+# Production
+build/
+*.log
+
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor folders and settings
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+coverage/
+jest.config.js.map
+test-results.xml
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+*.tmp
+*.swp
+*.pid
+*.seed
+*.pid.lock
+tmp/
+temp/
+
+# Next.js specific
+.next/
+out/
+.vercel/
+.env.build
+
+# Lint caches
+.eslintcache
+
+# Miscellaneous
+*.lock
+*.gz
+*.zip
+
+# Local serverless & Vercel
+.vercel/
+now.json
+
+# Prisma (if used)
+prisma/dev.db
+prisma/migrations/
+prisma/*.sqlite
+
+# Uploads (if stored locally)
+uploads/
+public/uploads/
+
+# Turborepo cache
+.turbo/

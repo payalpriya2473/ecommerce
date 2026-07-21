@@ -1,0 +1,5 @@
+# Live-stock sync files that should NOT be pushed to GitHub
+# - migration is run manually against the database
+# - PHP file is deployed manually to the remote ODBC server
+Backend/migrations/2026_06_live_stock_sync.sql
+php-api/Stock-optimize-new.php
