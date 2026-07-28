@@ -2,10 +2,12 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
+  customerOrderAPI,
   customerProfileAPI,
   getStoredCustomer,
   onCustomerAuthChange,
   type CustomerAddress,
+  type CustomerOrder,
   type CustomerProfile,
 } from "@/lib/api/customerApi";
 
@@ -63,6 +65,7 @@ export interface AccountOrderItem {
 
 export interface AccountOrder {
   id: string;
+  orderId?: string;
   date: string;
   status: "processing" | "shipped" | "delivered" | "cancelled" | "returned";
   statusLabel: string;
@@ -70,6 +73,9 @@ export interface AccountOrder {
   total: number;
   canReturn: boolean;
   canTrack: boolean;
+  paymentLabel?: string;
+  deliveryLabel?: string;
+  address?: string;
 }
 
 export interface AccountSettings {
@@ -95,7 +101,8 @@ interface AccountContextValue {
   orders: AccountOrder[];
   settings: AccountSettings;
   saveProfile: (profile: AccountProfile) => Promise<void>;
-  addAddress: (address: Omit<AccountAddress, "id">) => Promise<void>;
+  addAddress: (address: Omit<AccountAddress, "id">) => Promise<AccountAddress | null>;
+  refreshOrders: () => Promise<void>;
   updateAddress: (id: string, address: Omit<AccountAddress, "id">) => Promise<void>;
   removeAddress: (id: string) => Promise<void>;
   setDefaultAddress: (id: string) => Promise<void>;
@@ -222,6 +229,57 @@ function profileFromApi(customer: CustomerProfile): AccountProfile {
   });
 }
 
+const PAYMENT_LABELS: Record<string, string> = {
+  upi: "UPI",
+  card: "Card",
+  netbanking: "Net Banking",
+  wallet: "Wallet",
+  cod: "Cash on Delivery",
+};
+
+function formatOrderDate(value?: string | null): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export function orderFromApi(order: CustomerOrder): AccountOrder {
+  const paymentLabel = PAYMENT_LABELS[order.paymentMethod] ?? order.paymentMethod;
+
+  return {
+    id: order.orderNumber || String(order.id),
+    orderId: String(order.id),
+    date: formatOrderDate(order.placedAt),
+    status: order.status,
+    statusLabel: order.statusLabel || "Order Placed",
+    total: Number(order.totalAmount) || 0,
+    canTrack: order.status === "processing" || order.status === "shipped",
+    canReturn: order.status === "delivered",
+    paymentLabel: order.paymentDetail ? `${paymentLabel} · ${order.paymentDetail}` : paymentLabel,
+    deliveryLabel: order.deliveryLabel ?? undefined,
+    address: [
+      order.address?.name,
+      order.address?.line1,
+      order.address?.line2,
+      [order.address?.city, order.address?.state, order.address?.pinCode].filter(Boolean).join(", "),
+    ]
+      .filter(Boolean)
+      .join(", "),
+    items: (order.items ?? []).map((item) => ({
+      id: String(item.id),
+      name: item.itemName,
+      img: item.primaryImage ?? null,
+      qty: Number(item.qty) || 1,
+      price: Number(item.unitPrice) || 0,
+    })),
+  };
+}
+
 function addressFromApi(address: CustomerAddress): AccountAddress {
   return normalizeAddress({
     id: address.id,
@@ -272,9 +330,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setSettings(cached.settings);
     }
 
-    const [profileResponse, addressesResponse] = await Promise.all([
+    const [profileResponse, addressesResponse, ordersResponse] = await Promise.all([
       customerProfileAPI.get(),
       customerProfileAPI.getAddresses(),
+      customerOrderAPI.getAll(),
     ]);
 
     const nextProfile = profileResponse.success && profileResponse.data
@@ -284,18 +343,30 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       addressesResponse.success && Array.isArray(addressesResponse.data)
         ? addressesResponse.data.map(addressFromApi)
         : cached?.addresses ?? [];
+    const nextOrders =
+      ordersResponse.success && Array.isArray(ordersResponse.data)
+        ? ordersResponse.data.map(orderFromApi)
+        : cached?.orders ?? [];
 
     setProfile(nextProfile);
     setAddresses(nextAddresses);
-    setOrders(cached?.orders ?? []);
+    setOrders(nextOrders);
     setSettings(cached?.settings ?? defaultSettings);
 
     writeStoredAccount(customerId, {
       profile: nextProfile,
       addresses: nextAddresses,
-      orders: cached?.orders ?? [],
+      orders: nextOrders,
       settings: cached?.settings ?? defaultSettings,
     });
+  }, []);
+
+  const refreshOrders = useCallback(async () => {
+    if (!customerIdRef.current) return;
+    const response = await customerOrderAPI.getAll();
+    if (response.success && Array.isArray(response.data)) {
+      setOrders(response.data.map(orderFromApi));
+    }
   }, []);
 
   useEffect(() => {
@@ -360,7 +431,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           : current;
         return [...next, nextAddress];
       });
-      return;
+      return nextAddress;
     }
 
     const response = await customerProfileAPI.addAddress({
@@ -383,7 +454,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           : current;
         return [...next, created];
       });
+      return created;
     }
+
+    return null;
   }, []);
 
   const updateAddress = useCallback(async (id: string, address: Omit<AccountAddress, "id">) => {
@@ -482,6 +556,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       settings,
       saveProfile,
       addAddress,
+      refreshOrders,
       updateAddress,
       removeAddress,
       setDefaultAddress,
@@ -495,6 +570,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       settings,
       saveProfile,
       addAddress,
+      refreshOrders,
       updateAddress,
       removeAddress,
       setDefaultAddress,

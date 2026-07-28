@@ -9,6 +9,7 @@ import { getCategoryUrl, slugifyCategoryName, type Category } from "@/lib/api/pu
 import { useWishlist } from "@/lib/wishlist/wishlist-context";
 import { useCart } from "@/lib/cart/cart-context";
 import { useAccount } from "@/lib/account/account-context";
+import { isLoggedIn, onCustomerAuthChange } from "@/lib/api/customerApi";
 import { announcementItems, navLinks } from "@/lib/data/homePageData";
 import "./StorefrontHeader.css";
 
@@ -52,7 +53,7 @@ export default function StorefrontHeader() {
   const { data: liveCategories } = useCategories({ showOnWebsite: true });
   const { itemCount: wishlistCount } = useWishlist();
   const { totalQuantity: cartTotalQuantity } = useCart();
-  const { addresses } = useAccount();
+  const { addresses, profile } = useAccount();
 
   const defaultAddress = addresses.find((address) => address.isDefault);
   const initialQuery = searchParams.get("q") ?? "";
@@ -68,9 +69,19 @@ export default function StorefrontHeader() {
     setHasHydrated(true);
   }, []);
 
+  const [isCustomer, setIsCustomer] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setIsCustomer(isLoggedIn());
+    sync();
+    return onCustomerAuthChange(sync);
+  }, []);
+
   const stableWishlistCount = hasHydrated ? wishlistCount : 0;
   const stableTotalQuantity = hasHydrated ? cartTotalQuantity : 0;
   const stableDefaultAddressType = hasHydrated ? defaultAddress?.type : undefined;
+  const stableIsCustomer = hasHydrated ? isCustomer : false;
+  const accountLabel = stableIsCustomer && profile.firstName ? profile.firstName : "Account";
 
   const navItems = useMemo(
     () =>
@@ -88,12 +99,20 @@ export default function StorefrontHeader() {
   const headerActions = useMemo(
     () => [
       { label: getDefaultLocationLabel(stableDefaultAddressType), icon: "fas fa-location-dot" },
-      // { label: "Account", icon: "fas fa-user", href: "/account" },
       { label: "Wishlist", icon: "far fa-heart", href: "/wishlist", badge: stableWishlistCount > 0 ? String(stableWishlistCount) : undefined },
       { label: "Support", icon: "fas fa-headset", href: "/faq" },
+      {
+        label: accountLabel,
+        activeKey: "Account",
+        icon: "fas fa-user",
+        buttonClass: "account-action",
+        // Signed-out shoppers land on login first, then bounce back to their account.
+        href: stableIsCustomer ? "/account" : "/login?redirect=/account",
+        title: stableIsCustomer ? "My Account" : "Sign in to your account",
+      },
       { label: "Cart", icon: "fas fa-shopping-cart", href: "/cart", buttonClass: "cart-action", badge: stableTotalQuantity > 0 ? String(stableTotalQuantity) : undefined },
     ],
-    [stableDefaultAddressType, stableWishlistCount, stableTotalQuantity],
+    [stableDefaultAddressType, stableWishlistCount, stableTotalQuantity, stableIsCustomer, accountLabel],
   );
 
   const categoryOptions = useMemo(
@@ -172,16 +191,18 @@ export default function StorefrontHeader() {
           <div className="sf-header-actions">
             {headerActions.map((item) => {
               const buttonClass = "buttonClass" in item ? item.buttonClass : "";
+              const activeKey = "activeKey" in item ? item.activeKey : item.label;
+              const title = "title" in item ? item.title : undefined;
               const className = [
                 "sf-h-action",
                 buttonClass ? `sf-${buttonClass}` : "",
-                isActionActive(pathname, item.label) ? "active" : "",
+                isActionActive(pathname, activeKey) ? "active" : "",
               ]
                 .filter(Boolean)
                 .join(" ");
 
               return item.href ? (
-                <Link key={item.label} href={item.href} className={className}>
+                <Link key={activeKey} href={item.href} className={className} title={title}>
                   <i className={item.icon} />
                   <span>{item.label}</span>
                   {item.badge ? <div className="sf-badge">{item.badge}</div> : null}

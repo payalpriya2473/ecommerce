@@ -1,13 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useCallback } from "react";
-import { useAccount } from "@/lib/account/account-context";
+import { useRouter } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { useAccount, orderFromApi, type AccountAddress } from "@/lib/account/account-context";
+import { useCart } from "@/lib/cart/cart-context";
+import { getImageUrl } from "@/lib/api/publicApi";
+import {
+  customerOrderAPI,
+  isLoggedIn,
+  onCustomerAuthChange,
+  type CustomerOrder,
+  type PlaceOrderPayload,
+} from "@/lib/api/customerApi";
+import {
+  COUPONS,
+  DELIVERY_OPTIONS,
+  clearCheckoutCoupon,
+  computeOrderTotals,
+  formatRupees,
+  readCheckoutCoupon,
+  saveCheckoutCoupon,
+  type DeliveryType,
+  type PaymentMethod,
+} from "@/lib/pricing/order-pricing";
 import "./CheckoutPage.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3;
-type PayTab = "upi" | "card" | "netbanking" | "wallet" | "cod";
 
 interface Toast {
   id: number;
@@ -15,145 +42,323 @@ interface Toast {
   type: "success" | "warning";
 }
 
-interface OrderItem {
-  id: number;
-  brand: string;
-  name: string;
-  img: string;
-  price: number;
-  original: number;
-  qty: number;
-}
+const PROGRESS_STEPS = ["Cart", "Address", "Payment", "Confirm"];
 
-interface DeliveryOption {
-  type: string;
-  label: string;
-  cost: number;
-}
-
-// ─── Static Data ──────────────────────────────────────────────────────────────
-const ORDER_ITEMS: OrderItem[] = [
-  { id: 1, brand: "Apple", name: "iPhone 16 Pro Max 256GB Natural Titanium", img: "https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=400&q=80", price: 134900, original: 139900, qty: 1 },
-  { id: 2, brand: "Samsung", name: "Galaxy S24 Ultra 256GB Titanium Black", img: "https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=400&q=80", price: 109999, original: 124999, qty: 1 },
-  { id: 3, brand: "Sony", name: "WH-1000XM5 Wireless Headphones", img: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&q=80", price: 24990, original: 29990, qty: 2 },
+const STATES = [
+  "Andhra Pradesh", "Assam", "Bihar", "Chhattisgarh", "Delhi", "Goa", "Gujarat", "Haryana",
+  "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra",
+  "Odisha", "Punjab", "Rajasthan", "Tamil Nadu", "Telangana", "Uttar Pradesh", "Uttarakhand",
+  "West Bengal",
 ];
 
-const STATES = ["Maharashtra", "Delhi", "Karnataka", "Tamil Nadu", "Gujarat", "Rajasthan", "Telangana", "West Bengal", "Uttar Pradesh", "Madhya Pradesh", "Kerala", "Punjab"];
-
 const PINCODE_MAP: Record<string, { city: string; state: string }> = {
-  "400064": { city: "Mumbai", state: "Maharashtra" },
   "400001": { city: "Mumbai", state: "Maharashtra" },
+  "400064": { city: "Mumbai", state: "Maharashtra" },
+  "411001": { city: "Pune", state: "Maharashtra" },
   "110001": { city: "New Delhi", state: "Delhi" },
   "560001": { city: "Bengaluru", state: "Karnataka" },
   "600001": { city: "Chennai", state: "Tamil Nadu" },
+  "500001": { city: "Hyderabad", state: "Telangana" },
+  "700001": { city: "Kolkata", state: "West Bengal" },
+  "380001": { city: "Ahmedabad", state: "Gujarat" },
+  "302001": { city: "Jaipur", state: "Rajasthan" },
 };
 
-const ANN_ITEMS = [
-  { icon: "fa-shield-halved", text: "100% Secure Checkout — All data encrypted" },
-  { icon: "fa-credit-card", text: "No-Cost EMI on HDFC, SBI & Axis Bank" },
-  { icon: "fa-truck-fast", text: "Free Express Delivery on this order" },
-  { icon: "fa-rotate-left", text: "10-Day Easy Return Policy" },
+const UPI_APPS = [
+  { name: "GPay", label: "Google Pay", style: { background: "#e8f5e9", color: "#34a853" }, icon: "fab fa-google-pay" },
+  { name: "PhonePe", label: "PhonePe", style: { background: "#f3e8ff", color: "#7c3aed" }, icon: "fas fa-bolt" },
+  { name: "Paytm", label: "Paytm", style: { background: "#eff6ff", color: "#1d4ed8" }, text: "Pay" },
+  { name: "BHIM", label: "BHIM UPI", style: { background: "#fff1f2", color: "#dc2626" }, text: "BHIM" },
 ];
 
-// ─── Progress Config ──────────────────────────────────────────────────────────
-const PROGRESS_STEPS = ["Cart", "Address", "Payment", "Confirm"];
+const BANKS = [
+  { name: "HDFC Bank", short: "HDFC", style: { background: "linear-gradient(135deg, #003399, #0066cc)" } },
+  { name: "State Bank of India", short: "SBI", style: { background: "linear-gradient(135deg, #003399, #1565c0)" } },
+  { name: "Axis Bank", short: "AXIS", style: { background: "linear-gradient(135deg, #8b0000, #cc0000)" } },
+  { name: "ICICI Bank", short: "ICICI", style: { background: "linear-gradient(135deg, #ff6600, #cc5200)" } },
+];
+
+const OTHER_BANKS = [
+  "Kotak Mahindra Bank", "Yes Bank", "Bank of Baroda", "Punjab National Bank",
+  "Canara Bank", "IndusInd Bank", "Federal Bank", "IDFC First Bank",
+];
+
+const WALLETS = ["Paytm Wallet", "PhonePe Wallet", "Amazon Pay", "Mobikwik", "Ola Money", "Airtel Money"];
+
+const WALLET_ICONS: Record<string, string> = {
+  "Paytm Wallet": "💙",
+  "PhonePe Wallet": "💜",
+  "Amazon Pay": "🟢",
+  Mobikwik: "🔵",
+  "Ola Money": "🟠",
+  "Airtel Money": "🔴",
+};
+
+const EMPTY_FORM = {
+  name: "",
+  phone: "",
+  addr1: "",
+  addr2: "",
+  landmark: "",
+  pincode: "",
+  city: "",
+  state: "",
+  addrType: "home" as AccountAddress["type"],
+};
+
+function luhnValid(cardNumber: string) {
+  const digits = cardNumber.replace(/\D/g, "");
+  if (digits.length < 13 || digits.length > 19) return false;
+  let sum = 0;
+  let double = false;
+  for (let i = digits.length - 1; i >= 0; i -= 1) {
+    let value = Number(digits[i]);
+    if (double) {
+      value *= 2;
+      if (value > 9) value -= 9;
+    }
+    sum += value;
+    double = !double;
+  }
+  return sum % 10 === 0;
+}
+
+function expiryValid(value: string) {
+  const match = value.replace(/\s/g, "").match(/^(\d{2})\/?(\d{2})$/);
+  if (!match) return false;
+  const month = Number(match[1]);
+  const year = 2000 + Number(match[2]);
+  if (month < 1 || month > 12) return false;
+  const expiry = new Date(year, month, 0, 23, 59, 59);
+  return expiry.getTime() > Date.now();
+}
+
+function formatAddressLines(address: AccountAddress | null) {
+  if (!address) return [];
+  return [
+    address.line1,
+    address.line2,
+    [address.city, address.state, address.pinCode].filter(Boolean).join(", "),
+  ].filter(Boolean) as string[];
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function CheckoutPage() {
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+  const router = useRouter();
+
+  const { items: cartItems, clearCart } = useCart();
+  const { profile, addresses, addAddress, addOrder, refreshOrders } = useAccount();
+
+  const [authState, setAuthState] = useState<"checking" | "guest" | "member">("checking");
   const [currentStep, setCurrentStep] = useState<Step>(1);
-  const [selectedDelivery, setSelectedDelivery] = useState<DeliveryOption>({ type: "free", label: "Standard Delivery", cost: 0 });
-  const [selectedAddr, setSelectedAddr] = useState<number>(-1);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [showNewAddress, setShowNewAddress] = useState(false);
-  const [activePayTab, setActivePayTab] = useState<PayTab>("upi");
-  const [selectedUpiApp, setSelectedUpiApp] = useState("GPay");
-  const [selectedCard, setSelectedCard] = useState<number>(0);
-  const [selectedNB, setSelectedNB] = useState<number>(0);
-  const [selectedWallet, setSelectedWallet] = useState<number>(0);
-  const [showNewCard, setShowNewCard] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [savingAddress, setSavingAddress] = useState(false);
+
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>("free");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("upi");
+  const [upiApp, setUpiApp] = useState("GPay");
   const [upiId, setUpiId] = useState("");
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [orderId, setOrderId] = useState("");
+  const [upiVerified, setUpiVerified] = useState(false);
+  const [card, setCard] = useState({ number: "", name: "", expiry: "", cvv: "" });
+  const [bank, setBank] = useState("HDFC Bank");
+  const [wallet, setWallet] = useState("Paytm Wallet");
+
+  const [couponCode, setCouponCode] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [placedOrder, setPlacedOrder] = useState<CustomerOrder | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const { profile, addresses, addAddress } = useAccount();
+  const toastIdRef = useRef(0);
 
-  // ── New address form state ──
-  const [form, setForm] = useState({ name: "", phone: "", addr1: "", addr2: "", pincode: "", landmark: "", city: "", state: "", addrType: "home" });
-  const selectedAddress = addresses[selectedAddr] ?? addresses.find((address) => address.isDefault) ?? null;
-
-  // ── Pricing ──
-  const subtotal = ORDER_ITEMS.reduce((s, i) => s + i.price * i.qty, 0);
-  const originalTotal = ORDER_ITEMS.reduce((s, i) => s + i.original * i.qty, 0);
-  const productDisc = originalTotal - subtotal;
-  const couponDisc = 3000;
-  const tax = Math.round((subtotal - couponDisc) * 0.018);
-  const total = subtotal - couponDisc + selectedDelivery.cost + tax;
-
-  // ── Toast ──
+  // ── Toast ──────────────────────────────────────────────────────────────────
   const showToast = useCallback((message: string, type: "success" | "warning" = "success") => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2900);
+    const id = (toastIdRef.current += 1);
+    setToasts((current) => [...current, { id, message, type }]);
+    setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 2900);
   }, []);
 
-  // ── Step navigation ──
-  const goStep = (step: Step) => {
+  // ── Auth gate: checkout requires a signed-in customer ──────────────────────
+  useEffect(() => {
+    const sync = () => setAuthState(isLoggedIn() ? "member" : "guest");
+    sync();
+    return onCustomerAuthChange(sync);
+  }, []);
+
+  useEffect(() => {
+    if (authState === "guest" && !placedOrder) {
+      router.replace("/login?redirect=/checkout");
+    }
+  }, [authState, placedOrder, router]);
+
+  // ── Coupon handed over from the cart page ─────────────────────────────────
+  useEffect(() => {
+    if (!hydrated) return;
+    setCouponCode(readCheckoutCoupon());
+  }, [hydrated]);
+
+  // ── Address selection defaults to the customer's default address ──────────
+  useEffect(() => {
+    if (addresses.length === 0) {
+      setSelectedAddressId(null);
+      return;
+    }
+    setSelectedAddressId((current) => {
+      if (current && addresses.some((address) => address.id === current)) return current;
+      const preferred = addresses.find((address) => address.isDefault) ?? addresses[0];
+      return preferred.id;
+    });
+  }, [addresses]);
+
+  const selectedAddress = useMemo(
+    () => addresses.find((address) => address.id === selectedAddressId) ?? null,
+    [addresses, selectedAddressId]
+  );
+
+  // ── Only the items ticked on the cart page are checked out ────────────────
+  const orderLines = useMemo(
+    () => cartItems.filter((item) => item.selected !== false),
+    [cartItems]
+  );
+
+  const totals = useMemo(
+    () => computeOrderTotals(orderLines, { couponCode, deliveryType, paymentMethod }),
+    [orderLines, couponCode, deliveryType, paymentMethod]
+  );
+
+  // ── Payment summary label ─────────────────────────────────────────────────
+  const paymentDetail = useMemo(() => {
+    switch (paymentMethod) {
+      case "upi":
+        return upiId.trim() ? upiId.trim() : UPI_APPS.find((app) => app.name === upiApp)?.label ?? "UPI";
+      case "card": {
+        const digits = card.number.replace(/\D/g, "");
+        return digits ? `•••• ${digits.slice(-4)}` : "Card";
+      }
+      case "netbanking":
+        return bank;
+      case "wallet":
+        return wallet;
+      default:
+        return "Pay on delivery";
+    }
+  }, [paymentMethod, upiApp, upiId, card.number, bank, wallet]);
+
+  // ── Validation ────────────────────────────────────────────────────────────
+  const addressError = !selectedAddress ? "Please add or select a delivery address" : null;
+
+  const paymentError = useMemo(() => {
+    if (paymentMethod === "upi") {
+      const typed = upiId.trim();
+      if (typed && !/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(typed)) return "Enter a valid UPI ID (e.g. name@bank)";
+      return null;
+    }
+    if (paymentMethod === "card") {
+      if (!luhnValid(card.number)) return "Enter a valid card number";
+      if (!card.name.trim()) return "Enter the name printed on the card";
+      if (!expiryValid(card.expiry)) return "Enter a valid expiry date (MM/YY)";
+      if (!/^\d{3,4}$/.test(card.cvv)) return "Enter the 3-digit CVV";
+      return null;
+    }
+    if (paymentMethod === "netbanking" && !bank) return "Select a bank to continue";
+    if (paymentMethod === "wallet" && !wallet) return "Select a wallet to continue";
+    return null;
+  }, [paymentMethod, upiId, card, bank, wallet]);
+
+  // ── Step navigation ───────────────────────────────────────────────────────
+  const goStep = useCallback((step: Step) => {
     setCurrentStep(step);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const goToPayment = useCallback(() => {
+    if (addressError) {
+      showToast(addressError, "warning");
+      setShowNewAddress(true);
+      return;
+    }
+    goStep(2);
+  }, [addressError, goStep, showToast]);
+
+  const goToReview = useCallback(() => {
+    if (paymentError) {
+      showToast(paymentError, "warning");
+      return;
+    }
+    goStep(3);
+  }, [goStep, paymentError, showToast]);
+
+  // ── New address ───────────────────────────────────────────────────────────
+  const handlePincode = (pin: string) => {
+    const digits = pin.replace(/\D/g, "").slice(0, 6);
+    setForm((current) => ({ ...current, pincode: digits }));
+    const match = PINCODE_MAP[digits];
+    if (digits.length === 6 && match) {
+      setForm((current) => ({ ...current, city: match.city, state: match.state }));
+      showToast(`Location detected: ${match.city}, ${match.state}`);
+    }
   };
 
-  // ── Pincode lookup ──
-  const handlePincode = (pin: string) => {
-    setForm((f) => ({ ...f, pincode: pin }));
-    if (pin.length === 6 && PINCODE_MAP[pin]) {
-      const { city, state } = PINCODE_MAP[pin];
-      setForm((f) => ({ ...f, city, state }));
-      showToast(`Location: ${city}, ${state}`);
+  const openNewAddress = () => {
+    if (showNewAddress) {
+      setShowNewAddress(false);
+      return;
     }
+    setForm((current) => ({
+      ...current,
+      name: current.name || `${profile.firstName} ${profile.lastName}`.trim(),
+      phone: current.phone || profile.phone || "",
+    }));
+    setShowNewAddress(true);
   };
 
   const saveNewAddress = async () => {
-    if (!form.name.trim() || !form.phone.trim() || !form.addr1.trim()) {
-      showToast("Name, phone, and address are required", "warning");
-      return;
-    }
+    const phoneDigits = form.phone.replace(/\D/g, "");
 
-    await addAddress({
-      type: form.addrType as "home" | "work" | "other",
+    if (!form.name.trim()) return showToast("Full name is required", "warning");
+    if (phoneDigits.length < 10) return showToast("Enter a valid 10-digit mobile number", "warning");
+    if (!form.addr1.trim()) return showToast("Flat / house / building is required", "warning");
+    if (form.pincode.length !== 6) return showToast("Enter a valid 6-digit pincode", "warning");
+    if (!form.city.trim()) return showToast("City is required", "warning");
+    if (!form.state.trim()) return showToast("State is required", "warning");
+
+    setSavingAddress(true);
+    const created = await addAddress({
+      type: form.addrType,
       name: form.name.trim(),
-      phone: form.phone.trim(),
+      phone: phoneDigits.slice(-10),
       line1: form.addr1.trim(),
       line2: [form.addr2.trim(), form.landmark.trim()].filter(Boolean).join(", "),
       city: form.city.trim(),
       state: form.state.trim(),
-      pinCode: form.pincode.trim(),
+      pinCode: form.pincode,
       isDefault: addresses.length === 0,
     });
+    setSavingAddress(false);
 
-    setSelectedAddr(addresses.length);
+    if (!created) {
+      showToast("Could not save the address. Please try again.", "warning");
+      return;
+    }
+
+    setSelectedAddressId(created.id);
     setShowNewAddress(false);
-    setForm({ name: "", phone: "", addr1: "", addr2: "", pincode: "", landmark: "", city: "", state: "", addrType: "home" });
-    showToast("Address saved for checkout");
+    setForm(EMPTY_FORM);
+    showToast("Address saved and selected for this order");
   };
 
-  // ── Place Order ──
-  const placeOrder = () => {
-    setIsProcessing(true);
-    setTimeout(() => {
-      const id = `MB-2025-${Math.floor(Math.random() * 900000 + 100000)}`;
-      setOrderId(id);
-      setShowSuccess(true);
-      launchConfetti();
-      setIsProcessing(false);
-    }, 1800);
-  };
-
-  const launchConfetti = () => {
+  // ── Place order ───────────────────────────────────────────────────────────
+  const launchConfetti = useCallback(() => {
     const colors = ["#dc2626", "#ff6b35", "#22c55e", "#3b82f6", "#facc15", "#a855f7"];
-    for (let i = 0; i < 60; i++) {
-      const el = document.createElement("div");
-      el.className = "confetti-piece";
-      el.style.cssText = `
+    for (let i = 0; i < 60; i += 1) {
+      const piece = document.createElement("div");
+      piece.className = "confetti-piece";
+      piece.style.cssText = `
         left:${Math.random() * 100}vw;
         width:${Math.random() * 10 + 5}px;
         height:${Math.random() * 10 + 5}px;
@@ -162,27 +367,128 @@ export default function CheckoutPage() {
         animation-duration:${Math.random() * 2 + 1.5}s;
         animation-delay:${Math.random() * 0.8}s;
       `;
-      document.body.appendChild(el);
-      setTimeout(() => el.remove(), 4000);
+      document.body.appendChild(piece);
+      setTimeout(() => piece.remove(), 4000);
     }
-  };
+  }, []);
+
+  const placeOrder = useCallback(async () => {
+    if (isProcessing) return;
+
+    if (orderLines.length === 0) {
+      showToast("Your cart is empty", "warning");
+      return;
+    }
+    if (addressError) {
+      showToast(addressError, "warning");
+      goStep(1);
+      return;
+    }
+    if (paymentError) {
+      showToast(paymentError, "warning");
+      goStep(2);
+      return;
+    }
+
+    const payload: PlaceOrderPayload = {
+      items: orderLines.map((item) => ({
+        itemId: item.itemId ?? item.id,
+        qty: Number(item.qty) || 1,
+        unitPrice: Number(item.offerPrice) || 0,
+        originalPrice: Number(item.originalPrice) || Number(item.offerPrice) || 0,
+        itemName: item.itemName,
+        brandName: item.brandName ?? null,
+        categoryName: item.categoryName ?? null,
+        variant: item.variant ?? null,
+        colorName: item.colorName ?? null,
+        primaryImage: item.primaryImage ?? null,
+        gst: item.gst ?? null,
+      })),
+      addressId: selectedAddress?.id ?? null,
+      address: selectedAddress
+        ? {
+            type: selectedAddress.type,
+            name: selectedAddress.name,
+            phone: selectedAddress.phone,
+            line1: selectedAddress.line1,
+            line2: selectedAddress.line2,
+            city: selectedAddress.city,
+            state: selectedAddress.state,
+            pinCode: selectedAddress.pinCode,
+          }
+        : undefined,
+      paymentMethod,
+      paymentDetail,
+      deliveryType,
+      couponCode,
+    };
+
+    setIsProcessing(true);
+    const response = await customerOrderAPI.place(payload);
+    setIsProcessing(false);
+
+    if (!response.success || !response.data) {
+      showToast(response.message || "Could not place the order. Please try again.", "warning");
+      return;
+    }
+
+    const order = response.data;
+    setPlacedOrder(order);
+    addOrder(orderFromApi(order));
+    clearCart();
+    clearCheckoutCoupon();
+    setCouponCode(null);
+    launchConfetti();
+    void refreshOrders();
+
+    if (order.unavailable && order.unavailable.length > 0) {
+      showToast(`Skipped unavailable products: ${order.unavailable.join(", ")}`, "warning");
+    }
+  }, [
+    addOrder,
+    addressError,
+    clearCart,
+    couponCode,
+    deliveryType,
+    goStep,
+    isProcessing,
+    launchConfetti,
+    orderLines,
+    paymentDetail,
+    paymentError,
+    paymentMethod,
+    refreshOrders,
+    selectedAddress,
+    showToast,
+  ]);
 
   const copyOrderId = () => {
-    if (navigator.clipboard) navigator.clipboard.writeText(orderId).then(() => showToast("Order ID copied!"));
+    if (!placedOrder || !navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(placedOrder.orderNumber)
+      .then(() => showToast("Order ID copied!"))
+      .catch(() => showToast("Could not copy the order ID", "warning"));
   };
 
-  // ── Progress indicators ──
-  const progressStep = currentStep + 1; // cart is step 1 in progress bar
+  const removeCoupon = () => {
+    setCouponCode(null);
+    saveCheckoutCoupon(null);
+    showToast("Coupon removed", "warning");
+  };
 
+  const progressStep = currentStep + 1; // the cart itself is step 1 of the bar
+  const showEmptyState = hydrated && authState === "member" && orderLines.length === 0 && !placedOrder;
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
       {/* Progress */}
       <div className="co-progress-wrap">
         <div className="co-progress">
-          {PROGRESS_STEPS.map((label, i) => {
-            const stepNum = i + 1;
-            const isDone = stepNum < progressStep;
-            const isActive = stepNum === progressStep;
+          {PROGRESS_STEPS.map((label, index) => {
+            const stepNum = index + 1;
+            const isDone = placedOrder ? true : stepNum < progressStep;
+            const isActive = !placedOrder && stepNum === progressStep;
             return (
               <div key={label} style={{ display: "flex", alignItems: "center" }}>
                 <div className="cp-step">
@@ -191,517 +497,787 @@ export default function CheckoutPage() {
                   </div>
                   <div className={`cp-label${isDone ? " done" : isActive ? " active" : ""}`}>{label}</div>
                 </div>
-                {i < PROGRESS_STEPS.length - 1 && <div className={`cp-line${isDone ? " done" : ""}`} />}
+                {index < PROGRESS_STEPS.length - 1 && <div className={`cp-line${isDone ? " done" : ""}`} />}
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Main */}
       <main style={{ background: "#f8fafc", minHeight: "60vh" }}>
-        <div className="co-page-inner">
-          {/* LEFT: Steps */}
-          <div>
-            {/* ─── STEP 1: ADDRESS ─── */}
-            <div className={`co-panel${currentStep === 1 ? " active" : ""}`}>
-              <div className="co-card">
-                <div className="co-card-head">
-                  <h2><div className="step-num">1</div> Delivery Address</h2>
-                </div>
-                <div className="co-card-body">
-                  <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#475569", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
-                    <i className="fas fa-location-dot" style={{ color: "#dc2626" }} /> Choose a saved address
-                  </div>
-
-                  <div className="saved-addresses">
-                    {addresses.map((addr, i) => (
-                      <div key={addr.id} className={`address-card${selectedAddr === i ? " selected" : ""}`} onClick={() => setSelectedAddr(i)}>
-                        <div className={`address-tag ${addr.type}`}>{addr.type.charAt(0).toUpperCase() + addr.type.slice(1)}</div>
-                        <div className="address-name">{addr.name}</div>
-                        <div className="address-text">
-                          {[addr.line1, addr.line2, [addr.city, addr.state, addr.pinCode].filter(Boolean).join(", ")].filter(Boolean).map((line, j) => <span key={j}>{line}<br /></span>)}
-                        </div>
-                        <div className="address-phone"><i className="fas fa-phone" /> {addr.phone}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {addresses.length === 0 ? (
-                    <div className="field-hint" style={{ marginBottom: 18 }}>
-                      <i className="fas fa-info-circle" /> No saved addresses yet. Add one below or manage them in My Account.
-                    </div>
-                  ) : null}
-
-                  <button className="add-new-address" onClick={() => {
-                    if (showNewAddress) {
-                      setShowNewAddress(false);
-                      return;
-                    }
-
-                    setForm((current) => ({
-                      ...current,
-                      name: current.name || `${profile.firstName} ${profile.lastName}`.trim(),
-                      phone: current.phone || profile.phone || "",
-                    }));
-                    setShowNewAddress(true);
-                  }}>
-                    <i className={`fas ${showNewAddress ? "fa-times-circle" : "fa-plus-circle"}`} />
-                    {showNewAddress ? "Cancel" : "Add a New Address"}
-                  </button>
-
-                  {showNewAddress && (
-                    <div style={{ marginTop: 18, animation: "stepIn 0.3s ease" }}>
-                      <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a", marginBottom: 14, display: "flex", alignItems: "center", gap: 6 }}>
-                        <i className="fas fa-plus" style={{ color: "#dc2626" }} /> New Delivery Address
-                      </div>
-                      <div className="form-grid">
-                        <div className="form-group">
-                          <label>Full Name <span className="req">*</span></label>
-                          <input className="form-input" type="text" placeholder="e.g. Saurabh Kapoor" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-                        </div>
-                        <div className="form-group">
-                          <label>Mobile Number <span className="req">*</span></label>
-                          <input className="form-input" type="tel" placeholder="+91 98765 43210" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} maxLength={13} />
-                        </div>
-                        <div className="form-group span-2">
-                          <label>Flat / House No, Building <span className="req">*</span></label>
-                          <input className="form-input" type="text" placeholder="Flat 402, Sunrise Tower" value={form.addr1} onChange={(e) => setForm({ ...form, addr1: e.target.value })} />
-                        </div>
-                        <div className="form-group span-2">
-                          <label>Area, Street, Sector, Village</label>
-                          <input className="form-input" type="text" placeholder="Link Road, Malad West" value={form.addr2} onChange={(e) => setForm({ ...form, addr2: e.target.value })} />
-                        </div>
-                        <div className="form-group">
-                          <label>Pincode <span className="req">*</span></label>
-                          <input className="form-input" type="text" placeholder="400064" maxLength={6} value={form.pincode} onChange={(e) => handlePincode(e.target.value)} />
-                          <div className="field-hint"><i className="fas fa-info-circle" /> City & State auto-fill on valid pincode</div>
-                        </div>
-                        <div className="form-group">
-                          <label>Landmark (Optional)</label>
-                          <input className="form-input" type="text" placeholder="Near Infinity Mall" value={form.landmark} onChange={(e) => setForm({ ...form, landmark: e.target.value })} />
-                        </div>
-                        <div className="form-group">
-                          <label>City <span className="req">*</span></label>
-                          <input className="form-input" type="text" placeholder="Mumbai" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-                        </div>
-                        <div className="form-group">
-                          <label>State <span className="req">*</span></label>
-                          <select className="form-select" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}>
-                            <option value="">Select State</option>
-                            {STATES.map((s) => <option key={s}>{s}</option>)}
-                          </select>
-                        </div>
-                        <div className="form-group span-2">
-                          <label>Address Type</label>
-                          <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
-                            {["home", "work", "other"].map((type) => (
-                              <label key={type} style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: "0.85rem", fontWeight: 600 }}>
-                                <input type="radio" name="addrType" value={type} checked={form.addrType === type} onChange={() => setForm({ ...form, addrType: type })} style={{ accentColor: "#dc2626" }} />
-                                <i className={`fas ${type === "home" ? "fa-house" : type === "work" ? "fa-building" : "fa-location-dot"}`} style={{ color: type === "home" ? "#dc2626" : type === "work" ? "#3b82f6" : "#64748b" }} />
-                                {type.charAt(0).toUpperCase() + type.slice(1)}
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-                        <button className="verify-btn" type="button" onClick={saveNewAddress}>
-                          <i className="fas fa-floppy-disk" /> Save Address
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Delivery Options */}
-                  <div className="delivery-options-label"><i className="fas fa-truck" /> Choose Delivery Speed</div>
-                  <div className="delivery-options">
-                    {[
-                      { type: "free", label: "Standard Delivery", badge: "FREE", badgeClass: "free", desc: "Delivered by Tomorrow · Between 9 AM – 9 PM", price: "FREE", cost: 0 },
-                      { type: "express", label: "Express Delivery", badge: "FAST", badgeClass: "fast", desc: "Delivered by Today by 10 PM · Priority handling", price: "Rs 79", cost: 79 },
-                      { type: "scheduled", label: "Scheduled Delivery", badge: "CHOOSE SLOT", badgeClass: "premium", desc: "Pick a 2-hour delivery window that suits you", price: "Rs 49", cost: 49 },
-                    ].map((opt) => (
-                      <div
-                        key={opt.type}
-                        className={`delivery-option${selectedDelivery.type === opt.type ? " selected" : ""}`}
-                        onClick={() => { setSelectedDelivery({ type: opt.type, label: opt.label, cost: opt.cost }); showToast(`${opt.label} selected`); }}
-                      >
-                        <div className="do-radio" />
-                        <div className="do-body">
-                          <div className="do-title">{opt.label} <span className={`do-badge ${opt.badgeClass}`}>{opt.badge}</span></div>
-                          <div className="do-desc">{opt.desc}</div>
-                        </div>
-                        <div className={`do-price${opt.cost === 0 ? " free" : ""}`}>{opt.price}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="step-actions">
-                <button className="btn-next" onClick={() => {
-                  if (!selectedAddress) {
-                    showToast("Please add or select a delivery address", "warning");
-                    return;
-                  }
-                  goStep(2);
-                }}><i className="fas fa-arrow-right" /> Continue to Payment</button>
-              </div>
+        {!hydrated || authState === "checking" || (authState === "guest" && !placedOrder) ? (
+          <div className="co-loading">
+            <i className="fas fa-spinner fa-spin" />
+            <span>{authState === "guest" ? "Redirecting to sign in…" : "Loading your checkout…"}</span>
+          </div>
+        ) : showEmptyState ? (
+          <div className="co-empty">
+            <div className="co-empty-icon"><i className="fas fa-bag-shopping" /></div>
+            <h2>Nothing to check out yet</h2>
+            <p>Your cart is empty, or none of the items in it are selected.</p>
+            <div className="co-empty-actions">
+              <Link href="/cart" className="co-empty-primary"><i className="fas fa-cart-shopping" /> Back to Cart</Link>
+              <Link href="/products" className="co-empty-outline"><i className="fas fa-store" /> Continue Shopping</Link>
             </div>
-
-            {/* ─── STEP 2: PAYMENT ─── */}
-            <div className={`co-panel${currentStep === 2 ? " active" : ""}`}>
-              {/* Address summary */}
-              <div className="co-card">
-                <div className="co-card-head">
-                  <h2><div className="step-num done"><i className="fas fa-check" /></div> Delivering to</h2>
-                  <button className="co-card-edit" onClick={() => goStep(1)}><i className="fas fa-pen" /> Change</button>
-                </div>
-                <div className="co-card-body" style={{ padding: "14px 22px" }}>
-                  <div style={{ fontSize: "0.85rem", color: "#0f172a" }}><strong>Saurabh Kapoor</strong> · +91 98765 43210</div>
-                  <div style={{ fontSize: "0.82rem", color: "#64748b", marginTop: 4 }}>402, Sunrise Tower, Link Road, Malad West, Mumbai - 400064, Maharashtra</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.75rem", fontWeight: 700, color: "#16a34a", marginTop: 8 }}>
-                    <i className="fas fa-truck-fast" /> {selectedDelivery.label} · {selectedDelivery.cost === 0 ? "FREE" : `Rs ${selectedDelivery.cost}`} · Arriving Tomorrow
+          </div>
+        ) : (
+          <div className="co-page-inner">
+            {/* LEFT: steps */}
+            <div>
+              {/* ─── STEP 1: ADDRESS ─── */}
+              <div className={`co-panel${currentStep === 1 && !placedOrder ? " active" : ""}`}>
+                <div className="co-card">
+                  <div className="co-card-head">
+                    <h2><div className="step-num">1</div> Delivery Address</h2>
+                    <Link href="/cart" className="co-card-edit"><i className="fas fa-arrow-left" /> Back to cart</Link>
                   </div>
-                </div>
-              </div>
-
-              {/* Payment Methods */}
-              <div className="co-card">
-                <div className="co-card-head">
-                  <h2><div className="step-num">2</div> Payment Method</h2>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.75rem", color: "#16a34a", fontWeight: 700 }}><i className="fas fa-lock" /> 100% Secure</div>
-                </div>
-                <div className="co-card-body">
-                  {/* Tabs */}
-                  <div className="payment-tabs">
-                    {(["upi", "card", "netbanking", "wallet", "cod"] as PayTab[]).map((tab) => (
-                      <button key={tab} className={`pay-tab${activePayTab === tab ? " active" : ""}`} onClick={() => setActivePayTab(tab)}>
-                        <i className={`fas ${tab === "upi" ? "fa-qrcode" : tab === "card" ? "fa-credit-card" : tab === "netbanking" ? "fa-university" : tab === "wallet" ? "fa-wallet" : "fa-money-bill-wave"}`} />
-                        {tab === "upi" ? "UPI" : tab === "card" ? "Cards" : tab === "netbanking" ? "Net Banking" : tab === "wallet" ? "Wallets" : "COD"}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* UPI */}
-                  <div className={`pay-panel${activePayTab === "upi" ? " active" : ""}`}>
-                    <div className="pay-panel-label">Pay via UPI App</div>
-                    <div className="upi-apps">
-                      {[
-                        { name: "GPay", label: "Google Pay", style: { background: "#e8f5e9", color: "#34a853" }, icon: "fab fa-google-pay" },
-                        { name: "PhonePe", label: "PhonePe", style: { background: "#f3e8ff", color: "#7c3aed" }, icon: "fas fa-bolt" },
-                        { name: "Paytm", label: "Paytm", style: { background: "#eff6ff", color: "#1d4ed8" }, text: "Pay" },
-                        { name: "BHIM", label: "BHIM UPI", style: { background: "#fff1f2", color: "#dc2626" }, text: "BHIM" },
-                      ].map((app) => (
-                        <button key={app.name} className={`upi-app${selectedUpiApp === app.name ? " selected" : ""}`} onClick={() => { setSelectedUpiApp(app.name); showToast(`${app.label} selected`); }}>
-                          <div className="upi-app-icon" style={app.style}>{app.icon ? <i className={app.icon} /> : <span style={{ fontWeight: 800, fontSize: "1rem" }}>{app.text}</span>}</div>
-                          <div className="upi-app-name">{app.label}</div>
-                        </button>
-                      ))}
+                  <div className="co-card-body">
+                    <div className="co-section-label">
+                      <i className="fas fa-location-dot" /> Choose a saved address
                     </div>
-                    <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#475569", marginBottom: 10 }}>Or enter UPI ID manually</div>
-                    <div className="upi-id-row">
-                      <input className="upi-id-input" type="text" placeholder="yourname@upi" value={upiId} onChange={(e) => setUpiId(e.target.value)} />
-                      <button className="verify-btn" onClick={() => {
-                        if (!upiId) { showToast("Enter a UPI ID first", "warning"); return; }
-                        if (upiId.includes("@")) {
-                          showToast(`UPI ID verified: ${upiId}`);
-                        } else {
-                          showToast("Invalid UPI ID format", "warning");
-                        }
-                      }}><i className="fas fa-check" /> Verify</button>
-                    </div>
-                    <div className="upi-hint"><i className="fas fa-info-circle" /> UPI payment is instant and secure</div>
-                  </div>
 
-                  {/* Cards */}
-                  <div className={`pay-panel${activePayTab === "card" ? " active" : ""}`}>
-                    <div className="pay-panel-label">Saved Cards</div>
-                    <div className="saved-cards">
-                      {[
-                        { type: "visa", num: "4512", sub: "Saurabh Kapoor · Expires 09/27", emi: "No-Cost EMI" },
-                        { type: "mastercard", num: "7890", sub: "Saurabh Kapoor · Expires 03/26", emi: "" },
-                      ].map((card, i) => (
-                        <div key={i} className={`saved-card-row${selectedCard === i ? " selected" : ""}`} onClick={() => setSelectedCard(i)}>
-                          <div className={`card-brand-icon ${card.type}`}>{card.type === "visa" ? "VISA" : "MC"}</div>
-                          <div className="card-info">
-                            <div className="card-num">•••• •••• •••• {card.num}</div>
-                            <div className="card-sub">{card.sub}</div>
+                    {addresses.length > 0 && (
+                      <div className="saved-addresses">
+                        {addresses.map((address) => (
+                          <div
+                            key={address.id}
+                            className={`address-card${selectedAddressId === address.id ? " selected" : ""}`}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedAddressId(address.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setSelectedAddressId(address.id);
+                              }
+                            }}
+                          >
+                            <div className={`address-tag ${address.type}`}>
+                              {address.type.charAt(0).toUpperCase() + address.type.slice(1)}
+                              {address.isDefault ? " · Default" : ""}
+                            </div>
+                            <div className="address-name">{address.name}</div>
+                            <div className="address-text">
+                              {formatAddressLines(address).map((line, index) => (
+                                <span key={index}>{line}<br /></span>
+                              ))}
+                            </div>
+                            <div className="address-phone"><i className="fas fa-phone" /> {address.phone}</div>
                           </div>
-                          {card.emi && <div className="card-emi-badge">{card.emi}</div>}
-                        </div>
-                      ))}
-                    </div>
-                    <button className="add-new-card-btn" onClick={() => setShowNewCard(!showNewCard)}>
-                      <i className="fas fa-plus-circle" /> Add New Debit/Credit Card
-                    </button>
-                    {showNewCard && (
-                      <div className="add-card-form">
-                        <div className="form-grid" style={{ marginTop: 16 }}>
-                          <div className="form-group span-2">
-                            <label>Card Number <span className="req">*</span></label>
-                            <input className="form-input" type="text" placeholder="1234 5678 9012 3456" maxLength={19} />
-                          </div>
-                          <div className="form-group span-2">
-                            <label>Name on Card <span className="req">*</span></label>
-                            <input className="form-input" type="text" placeholder="SAURABH KAPOOR" />
-                          </div>
-                          <div className="form-group">
-                            <label>Expiry Date <span className="req">*</span></label>
-                            <input className="form-input" type="text" placeholder="MM / YY" maxLength={7} />
-                          </div>
-                          <div className="form-group">
-                            <label>CVV <span className="req">*</span></label>
-                            <input className="form-input" type="password" placeholder="•••" maxLength={4} />
-                            <div className="field-hint"><i className="fas fa-info-circle" /> 3-digit code on back of card</div>
-                          </div>
-                        </div>
-                        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", fontWeight: 600, color: "#475569", marginTop: 10, cursor: "pointer" }}>
-                          <input type="checkbox" defaultChecked style={{ accentColor: "#dc2626" }} /> Save this card securely for future payments
-                        </label>
+                        ))}
                       </div>
                     )}
-                    <div className="emi-info-box">
-                      <i className="fas fa-tag" /> <strong>No-Cost EMI</strong> available from Rs 4,231/month on HDFC & SBI cards
-                    </div>
-                  </div>
 
-                  {/* Net Banking */}
-                  <div className={`pay-panel${activePayTab === "netbanking" ? " active" : ""}`}>
-                    <div className="pay-panel-label">Popular Banks</div>
-                    <div className="netbanking-grid">
-                      {[
-                        { name: "HDFC Bank", short: "HDFC", style: { background: "linear-gradient(135deg, #003399, #0066cc)" } },
-                        { name: "State Bank", short: "SBI", style: { background: "linear-gradient(135deg, #003399, #1565c0)" } },
-                        { name: "Axis Bank", short: "AXIS", style: { background: "linear-gradient(135deg, #8b0000, #cc0000)" } },
-                        { name: "ICICI Bank", short: "ICICI", style: { background: "linear-gradient(135deg, #ff6600, #cc5200)" } },
-                      ].map((bank, i) => (
-                        <button key={i} className={`nb-bank${selectedNB === i ? " selected" : ""}`} onClick={() => { setSelectedNB(i); showToast(`${bank.name} selected`); }}>
-                          <div className="nb-bank-icon" style={bank.style}>{bank.short}</div>
-                          <div className="nb-bank-name">{bank.name}</div>
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#475569", marginBottom: 10 }}>Other Banks</div>
-                    <select className="form-select">
-                      <option>Select your bank</option>
-                      {["Kotak Mahindra Bank", "Yes Bank", "Bank of Baroda", "Punjab National Bank", "Canara Bank", "IndusInd Bank", "Federal Bank"].map((b) => <option key={b}>{b}</option>)}
-                    </select>
-                  </div>
+                    {addresses.length === 0 && (
+                      <div className="field-hint" style={{ marginBottom: 18 }}>
+                        <i className="fas fa-info-circle" /> No saved addresses yet — add one below to continue.
+                      </div>
+                    )}
 
-                  {/* Wallets */}
-                  <div className={`pay-panel${activePayTab === "wallet" ? " active" : ""}`}>
-                    <div className="pay-panel-label">Choose Wallet</div>
-                    <div className="wallet-grid">
-                      {[
-                        { emoji: "💙", name: "Paytm Wallet", bal: "Rs 1,250" },
-                        { emoji: "💜", name: "PhonePe Wallet", bal: "Rs 800" },
-                        { emoji: "🟢", name: "Amazon Pay", bal: "Rs 0" },
-                        { emoji: "🔵", name: "Mobikwik", bal: "Rs 320" },
-                        { emoji: "🟠", name: "Ola Money", bal: "Rs 150" },
-                        { emoji: "🔴", name: "Airtel Money", bal: "Rs 0" },
-                      ].map((wallet, i) => (
-                        <button key={i} className={`wallet-opt${selectedWallet === i ? " selected" : ""}`} onClick={() => setSelectedWallet(i)}>
-                          <div className="wallet-icon">{wallet.emoji}</div>
-                          <div className="wallet-name">{wallet.name}</div>
-                          <div className="wallet-bal">Bal: {wallet.bal}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                    <button className="add-new-address" type="button" onClick={openNewAddress}>
+                      <i className={`fas ${showNewAddress ? "fa-times-circle" : "fa-plus-circle"}`} />
+                      {showNewAddress ? "Cancel" : "Add a New Address"}
+                    </button>
 
-                  {/* COD */}
-                  <div className={`pay-panel${activePayTab === "cod" ? " active" : ""}`}>
-                    <div className="cod-box selected">
-                      <i className="fas fa-money-bill-wave" />
-                      <h3>Cash on Delivery</h3>
-                      <p>Pay in cash when your order arrives at your doorstep. No advance payment needed.</p>
-                      <div className="cod-note"><i className="fas fa-info-circle" /> COD fee of Rs 29 applies on orders below Rs 1,000. This order qualifies for FREE COD!</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="step-actions">
-                <button className="btn-back" onClick={() => goStep(1)}><i className="fas fa-arrow-left" /> Back</button>
-                <button className="btn-next" onClick={() => goStep(3)}><i className="fas fa-eye" /> Review Order</button>
-              </div>
-            </div>
-
-            {/* ─── STEP 3: REVIEW ─── */}
-            <div className={`co-panel${currentStep === 3 ? " active" : ""}`}>
-              {/* Address summary */}
-              <div className="co-card">
-                <div className="co-card-head">
-                  <h2><div className="step-num done"><i className="fas fa-check" /></div> Delivery Address</h2>
-                  <button className="co-card-edit" onClick={() => goStep(1)}><i className="fas fa-pen" /> Change</button>
-                </div>
-                <div className="co-card-body" style={{ padding: "14px 22px" }}>
-                  <div style={{ fontSize: "0.85rem", color: "#0f172a" }}><strong>Saurabh Kapoor</strong> · +91 98765 43210</div>
-                  <div style={{ fontSize: "0.82rem", color: "#64748b", marginTop: 4 }}>402, Sunrise Tower, Link Road, Malad West, Mumbai - 400064, Maharashtra</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.75rem", fontWeight: 700, color: "#16a34a", marginTop: 8 }}>
-                    <i className="fas fa-truck-fast" /> {selectedDelivery.label} · {selectedDelivery.cost === 0 ? "FREE" : `Rs ${selectedDelivery.cost}`} · Arriving Tomorrow
-                  </div>
-                </div>
-              </div>
-
-              {/* Payment summary */}
-              <div className="co-card">
-                <div className="co-card-head">
-                  <h2><div className="step-num done"><i className="fas fa-check" /></div> Payment Method</h2>
-                  <button className="co-card-edit" onClick={() => goStep(2)}><i className="fas fa-pen" /> Change</button>
-                </div>
-                <div className="co-card-body" style={{ padding: "14px 22px", display: "flex", alignItems: "center", gap: 12 }}>
-                  {activePayTab === "upi" ? (
-                    <><div style={{ width: 44, height: 44, borderRadius: 10, background: "#e8f5e9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", color: "#34a853" }}><i className="fab fa-google-pay" /></div>
-                    <div><div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>UPI — {selectedUpiApp}</div><div style={{ fontSize: "0.72rem", color: "#64748b" }}>Instant & secure payment</div></div></>
-                  ) : activePayTab === "card" ? (
-                    <><div className="card-brand-icon visa">VISA</div>
-                    <div><div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Visa Credit Card ending in 4512</div><div style={{ fontSize: "0.72rem", color: "#64748b" }}>No-Cost EMI · 12 months · Rs 16,574/mo</div></div></>
-                  ) : activePayTab === "cod" ? (
-                    <><div style={{ fontSize: "1.8rem" }}>💵</div><div><div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>Cash on Delivery</div><div style={{ fontSize: "0.72rem", color: "#64748b" }}>Pay when order arrives</div></div></>
-                  ) : (
-                    <><i className="fas fa-university" style={{ fontSize: "1.5rem", color: "#dc2626" }} /><div><div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>{activePayTab.charAt(0).toUpperCase() + activePayTab.slice(1)} payment selected</div></div></>
-                  )}
-                </div>
-              </div>
-
-              {/* Order Items */}
-              <div className="co-card">
-                <div className="co-card-head">
-                  <h2><div className="step-num">3</div> Order Items</h2>
-                </div>
-                <div className="co-card-body">
-                  <div className="review-items">
-                    {ORDER_ITEMS.map((item) => (
-                      <div key={item.id} className="ri-card">
-                        <div className="ri-img"><img src={item.img} alt={item.name} loading="lazy" /></div>
-                        <div className="ri-body">
-                          <div className="ri-brand">{item.brand}</div>
-                          <div className="ri-name">{item.name}</div>
-                          <div className="ri-meta">Qty: {item.qty} · <span style={{ color: "#16a34a", fontWeight: 700 }}>In Stock</span></div>
+                    {showNewAddress && (
+                      <div style={{ marginTop: 18, animation: "co-step-in 0.3s ease" }}>
+                        <div className="co-section-label" style={{ marginTop: 0 }}>
+                          <i className="fas fa-plus" /> New Delivery Address
                         </div>
-                        <div className="ri-price">
-                          <div className="rprice">Rs {(item.price * item.qty).toLocaleString()}</div>
-                          <div className="rqty">Rs {item.price.toLocaleString()} each</div>
+                        <div className="form-grid">
+                          <div className="form-group">
+                            <label>Full Name <span className="req">*</span></label>
+                            <input
+                              className="form-input"
+                              type="text"
+                              placeholder="e.g. Saurabh Kapoor"
+                              value={form.name}
+                              onChange={(event) => setForm({ ...form, name: event.target.value })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Mobile Number <span className="req">*</span></label>
+                            <input
+                              className="form-input"
+                              type="tel"
+                              inputMode="numeric"
+                              placeholder="98765 43210"
+                              maxLength={12}
+                              value={form.phone}
+                              onChange={(event) =>
+                                setForm({ ...form, phone: event.target.value.replace(/[^\d\s]/g, "") })
+                              }
+                            />
+                          </div>
+                          <div className="form-group span-2">
+                            <label>Flat / House No, Building <span className="req">*</span></label>
+                            <input
+                              className="form-input"
+                              type="text"
+                              placeholder="Flat 402, Sunrise Tower"
+                              value={form.addr1}
+                              onChange={(event) => setForm({ ...form, addr1: event.target.value })}
+                            />
+                          </div>
+                          <div className="form-group span-2">
+                            <label>Area, Street, Sector, Village</label>
+                            <input
+                              className="form-input"
+                              type="text"
+                              placeholder="Link Road, Malad West"
+                              value={form.addr2}
+                              onChange={(event) => setForm({ ...form, addr2: event.target.value })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Pincode <span className="req">*</span></label>
+                            <input
+                              className="form-input"
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="400064"
+                              maxLength={6}
+                              value={form.pincode}
+                              onChange={(event) => handlePincode(event.target.value)}
+                            />
+                            <div className="field-hint"><i className="fas fa-info-circle" /> City &amp; state auto-fill for known pincodes</div>
+                          </div>
+                          <div className="form-group">
+                            <label>Landmark (Optional)</label>
+                            <input
+                              className="form-input"
+                              type="text"
+                              placeholder="Near Infinity Mall"
+                              value={form.landmark}
+                              onChange={(event) => setForm({ ...form, landmark: event.target.value })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>City <span className="req">*</span></label>
+                            <input
+                              className="form-input"
+                              type="text"
+                              placeholder="Mumbai"
+                              value={form.city}
+                              onChange={(event) => setForm({ ...form, city: event.target.value })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>State <span className="req">*</span></label>
+                            <select
+                              className="form-select"
+                              value={form.state}
+                              onChange={(event) => setForm({ ...form, state: event.target.value })}
+                            >
+                              <option value="">Select State</option>
+                              {STATES.map((state) => <option key={state}>{state}</option>)}
+                            </select>
+                          </div>
+                          <div className="form-group span-2">
+                            <label>Address Type</label>
+                            <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
+                              {(["home", "work", "other"] as const).map((type) => (
+                                <label key={type} className="co-radio-label">
+                                  <input
+                                    type="radio"
+                                    name="addrType"
+                                    value={type}
+                                    checked={form.addrType === type}
+                                    onChange={() => setForm({ ...form, addrType: type })}
+                                    style={{ accentColor: "#dc2626" }}
+                                  />
+                                  <i
+                                    className={`fas ${type === "home" ? "fa-house" : type === "work" ? "fa-building" : "fa-location-dot"}`}
+                                    style={{ color: type === "home" ? "#dc2626" : type === "work" ? "#3b82f6" : "#64748b" }}
+                                  />
+                                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+                          <button className="verify-btn" type="button" onClick={saveNewAddress} disabled={savingAddress}>
+                            {savingAddress
+                              ? <><i className="fas fa-spinner fa-spin" /> Saving…</>
+                              : <><i className="fas fa-floppy-disk" /> Save Address</>}
+                          </button>
                         </div>
                       </div>
-                    ))}
+                    )}
+
+                    {/* Delivery speed */}
+                    <div className="delivery-options-label"><i className="fas fa-truck" /> Choose Delivery Speed</div>
+                    <div className="delivery-options">
+                      {Object.values(DELIVERY_OPTIONS).map((option) => {
+                        const cost = option.type === "free" ? totals.deliveryCharge : option.cost;
+                        const isFree = option.type === "free" && totals.deliveryCharge === 0;
+                        return (
+                          <div
+                            key={option.type}
+                            className={`delivery-option${deliveryType === option.type ? " selected" : ""}`}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setDeliveryType(option.type)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setDeliveryType(option.type);
+                              }
+                            }}
+                          >
+                            <div className="do-radio" />
+                            <div className="do-body">
+                              <div className="do-title">
+                                {option.label}
+                                <span className={`do-badge ${option.badgeClass}`}>{isFree ? "FREE" : option.badge}</span>
+                              </div>
+                              <div className="do-desc">{option.desc}</div>
+                            </div>
+                            <div className={`do-price${cost === 0 ? " free" : ""}`}>
+                              {cost === 0 ? "FREE" : `Rs ${formatRupees(cost)}`}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Notices */}
-              <div className="co-card notice-box">
-                <div className="co-card-body" style={{ padding: "16px 22px" }}>
-                  <div className="notice-head"><i className="fas fa-triangle-exclamation" /> Please Review Before Placing Order</div>
-                  <div className="notice-item"><i className="fas fa-check" /> Returns accepted within 10 days of delivery</div>
-                  <div className="notice-item"><i className="fas fa-check" /> All products come with manufacturer warranty</div>
-                  <div className="notice-item"><i className="fas fa-check" /> By placing order, you agree to our <a href="#">Terms & Conditions</a> and <a href="#">Privacy Policy</a></div>
+                <div className="step-actions">
+                  <button className="btn-next" type="button" onClick={goToPayment}>
+                    <i className="fas fa-arrow-right" /> Continue to Payment
+                  </button>
                 </div>
               </div>
 
-              <div className="step-actions">
-                <button className="btn-back" onClick={() => goStep(2)}><i className="fas fa-arrow-left" /> Back</button>
-                <button className="btn-next" onClick={placeOrder} disabled={isProcessing}>
-                  {isProcessing ? <><i className="fas fa-spinner fa-spin" /> Processing...</> : <><i className="fas fa-lock" /> Place Order Securely</>}
-                </button>
+              {/* ─── STEP 2: PAYMENT ─── */}
+              <div className={`co-panel${currentStep === 2 && !placedOrder ? " active" : ""}`}>
+                <div className="co-card">
+                  <div className="co-card-head">
+                    <h2><div className="step-num done"><i className="fas fa-check" /></div> Delivering to</h2>
+                    <button className="co-card-edit" type="button" onClick={() => goStep(1)}><i className="fas fa-pen" /> Change</button>
+                  </div>
+                  <div className="co-card-body" style={{ padding: "14px 22px" }}>
+                    <div style={{ fontSize: "0.85rem", color: "#0f172a" }}>
+                      <strong>{selectedAddress?.name}</strong> · {selectedAddress?.phone}
+                    </div>
+                    <div style={{ fontSize: "0.82rem", color: "#64748b", marginTop: 4 }}>
+                      {formatAddressLines(selectedAddress).join(", ")}
+                    </div>
+                    <div className="co-delivery-note">
+                      <i className="fas fa-truck-fast" /> {DELIVERY_OPTIONS[deliveryType].label} ·{" "}
+                      {totals.deliveryCharge === 0 ? "FREE" : `Rs ${formatRupees(totals.deliveryCharge)}`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="co-card">
+                  <div className="co-card-head">
+                    <h2><div className="step-num">2</div> Payment Method</h2>
+                    <div className="co-secure-note"><i className="fas fa-lock" /> 100% Secure</div>
+                  </div>
+                  <div className="co-card-body">
+                    <div className="payment-tabs">
+                      {(["upi", "card", "netbanking", "wallet", "cod"] as PaymentMethod[]).map((tab) => (
+                        <button
+                          key={tab}
+                          type="button"
+                          className={`pay-tab${paymentMethod === tab ? " active" : ""}`}
+                          onClick={() => setPaymentMethod(tab)}
+                        >
+                          <i className={`fas ${tab === "upi" ? "fa-qrcode" : tab === "card" ? "fa-credit-card" : tab === "netbanking" ? "fa-university" : tab === "wallet" ? "fa-wallet" : "fa-money-bill-wave"}`} />
+                          {tab === "upi" ? "UPI" : tab === "card" ? "Cards" : tab === "netbanking" ? "Net Banking" : tab === "wallet" ? "Wallets" : "COD"}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* UPI */}
+                    <div className={`pay-panel${paymentMethod === "upi" ? " active" : ""}`}>
+                      <div className="pay-panel-label">Pay via UPI App</div>
+                      <div className="upi-apps">
+                        {UPI_APPS.map((app) => (
+                          <button
+                            key={app.name}
+                            type="button"
+                            className={`upi-app${upiApp === app.name && !upiId.trim() ? " selected" : ""}`}
+                            onClick={() => {
+                              setUpiApp(app.name);
+                              setUpiId("");
+                              setUpiVerified(false);
+                            }}
+                          >
+                            <div className="upi-app-icon" style={app.style}>
+                              {app.icon ? <i className={app.icon} /> : <span style={{ fontWeight: 800, fontSize: "1rem" }}>{app.text}</span>}
+                            </div>
+                            <div className="upi-app-name">{app.label}</div>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="pay-panel-label">Or enter UPI ID manually</div>
+                      <div className="upi-id-row">
+                        <input
+                          className="upi-id-input"
+                          type="text"
+                          placeholder="yourname@upi"
+                          value={upiId}
+                          onChange={(event) => {
+                            setUpiId(event.target.value);
+                            setUpiVerified(false);
+                          }}
+                        />
+                        <button
+                          className="verify-btn"
+                          type="button"
+                          onClick={() => {
+                            const typed = upiId.trim();
+                            if (!typed) {
+                              showToast("Enter a UPI ID first", "warning");
+                              return;
+                            }
+                            if (!/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(typed)) {
+                              setUpiVerified(false);
+                              showToast("Invalid UPI ID format", "warning");
+                              return;
+                            }
+                            setUpiVerified(true);
+                            showToast(`UPI ID verified: ${typed}`);
+                          }}
+                        >
+                          <i className="fas fa-check" /> Verify
+                        </button>
+                      </div>
+                      <div className="upi-hint">
+                        <i className={`fas ${upiVerified ? "fa-circle-check" : "fa-info-circle"}`} />
+                        {upiVerified
+                          ? "UPI ID verified — you'll approve the payment in your UPI app."
+                          : "UPI payment is instant and secure."}
+                      </div>
+                    </div>
+
+                    {/* Cards */}
+                    <div className={`pay-panel${paymentMethod === "card" ? " active" : ""}`}>
+                      <div className="pay-panel-label">Debit / Credit Card</div>
+                      <div className="form-grid">
+                        <div className="form-group span-2">
+                          <label>Card Number <span className="req">*</span></label>
+                          <input
+                            className="form-input"
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="1234 5678 9012 3456"
+                            maxLength={19}
+                            value={card.number}
+                            onChange={(event) =>
+                              setCard({
+                                ...card,
+                                number: event.target.value
+                                  .replace(/\D/g, "")
+                                  .slice(0, 16)
+                                  .replace(/(.{4})/g, "$1 ")
+                                  .trim(),
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="form-group span-2">
+                          <label>Name on Card <span className="req">*</span></label>
+                          <input
+                            className="form-input"
+                            type="text"
+                            placeholder="SAURABH KAPOOR"
+                            value={card.name}
+                            onChange={(event) => setCard({ ...card, name: event.target.value.toUpperCase() })}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>Expiry Date <span className="req">*</span></label>
+                          <input
+                            className="form-input"
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="MM / YY"
+                            maxLength={5}
+                            value={card.expiry}
+                            onChange={(event) => {
+                              const digits = event.target.value.replace(/\D/g, "").slice(0, 4);
+                              setCard({
+                                ...card,
+                                expiry: digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits,
+                              });
+                            }}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>CVV <span className="req">*</span></label>
+                          <input
+                            className="form-input"
+                            type="password"
+                            inputMode="numeric"
+                            placeholder="•••"
+                            maxLength={4}
+                            value={card.cvv}
+                            onChange={(event) => setCard({ ...card, cvv: event.target.value.replace(/\D/g, "") })}
+                          />
+                          <div className="field-hint"><i className="fas fa-lock" /> Card details are never stored on our servers</div>
+                        </div>
+                      </div>
+                      <div className="emi-info-box">
+                        <i className="fas fa-tag" /> <strong>No-Cost EMI</strong> available from Rs{" "}
+                        {formatRupees(Math.round(totals.total / 12))}/month on HDFC &amp; SBI cards
+                      </div>
+                    </div>
+
+                    {/* Net banking */}
+                    <div className={`pay-panel${paymentMethod === "netbanking" ? " active" : ""}`}>
+                      <div className="pay-panel-label">Popular Banks</div>
+                      <div className="netbanking-grid">
+                        {BANKS.map((option) => (
+                          <button
+                            key={option.name}
+                            type="button"
+                            className={`nb-bank${bank === option.name ? " selected" : ""}`}
+                            onClick={() => setBank(option.name)}
+                          >
+                            <div className="nb-bank-icon" style={option.style}>{option.short}</div>
+                            <div className="nb-bank-name">{option.name}</div>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="pay-panel-label">Other Banks</div>
+                      <select
+                        className="form-select"
+                        value={OTHER_BANKS.includes(bank) ? bank : ""}
+                        onChange={(event) => {
+                          if (event.target.value) setBank(event.target.value);
+                        }}
+                      >
+                        <option value="">Select your bank</option>
+                        {OTHER_BANKS.map((option) => <option key={option}>{option}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Wallets */}
+                    <div className={`pay-panel${paymentMethod === "wallet" ? " active" : ""}`}>
+                      <div className="pay-panel-label">Choose Wallet</div>
+                      <div className="wallet-grid">
+                        {WALLETS.map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            className={`wallet-opt${wallet === option ? " selected" : ""}`}
+                            onClick={() => setWallet(option)}
+                          >
+                            <div className="wallet-icon">{WALLET_ICONS[option]}</div>
+                            <div className="wallet-name">{option}</div>
+                            <div className="wallet-bal">Linked account</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* COD */}
+                    <div className={`pay-panel${paymentMethod === "cod" ? " active" : ""}`}>
+                      <div className="cod-box selected">
+                        <i className="fas fa-money-bill-wave" />
+                        <h3>Cash on Delivery</h3>
+                        <p>Pay in cash when your order arrives at your doorstep. No advance payment needed.</p>
+                        <div className="cod-note">
+                          <i className="fas fa-info-circle" />
+                          {totals.codFee > 0
+                            ? ` A COD handling fee of Rs ${formatRupees(totals.codFee)} applies on orders below Rs 1,000.`
+                            : " This order qualifies for FREE Cash on Delivery."}
+                        </div>
+                      </div>
+                    </div>
+
+                    {paymentError && (
+                      <div className="co-inline-error"><i className="fas fa-circle-exclamation" /> {paymentError}</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="step-actions">
+                  <button className="btn-back" type="button" onClick={() => goStep(1)}><i className="fas fa-arrow-left" /> Back</button>
+                  <button className="btn-next" type="button" onClick={goToReview}><i className="fas fa-eye" /> Review Order</button>
+                </div>
+              </div>
+
+              {/* ─── STEP 3: REVIEW ─── */}
+              <div className={`co-panel${currentStep === 3 && !placedOrder ? " active" : ""}`}>
+                <div className="co-card">
+                  <div className="co-card-head">
+                    <h2><div className="step-num done"><i className="fas fa-check" /></div> Delivery Address</h2>
+                    <button className="co-card-edit" type="button" onClick={() => goStep(1)}><i className="fas fa-pen" /> Change</button>
+                  </div>
+                  <div className="co-card-body" style={{ padding: "14px 22px" }}>
+                    <div style={{ fontSize: "0.85rem", color: "#0f172a" }}>
+                      <strong>{selectedAddress?.name}</strong> · {selectedAddress?.phone}
+                    </div>
+                    <div style={{ fontSize: "0.82rem", color: "#64748b", marginTop: 4 }}>
+                      {formatAddressLines(selectedAddress).join(", ")}
+                    </div>
+                    <div className="co-delivery-note">
+                      <i className="fas fa-truck-fast" /> {DELIVERY_OPTIONS[deliveryType].label} ·{" "}
+                      {totals.deliveryCharge === 0 ? "FREE" : `Rs ${formatRupees(totals.deliveryCharge)}`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="co-card">
+                  <div className="co-card-head">
+                    <h2><div className="step-num done"><i className="fas fa-check" /></div> Payment Method</h2>
+                    <button className="co-card-edit" type="button" onClick={() => goStep(2)}><i className="fas fa-pen" /> Change</button>
+                  </div>
+                  <div className="co-card-body co-payment-summary">
+                    <div className="co-payment-icon">
+                      <i className={`fas ${paymentMethod === "upi" ? "fa-qrcode" : paymentMethod === "card" ? "fa-credit-card" : paymentMethod === "netbanking" ? "fa-university" : paymentMethod === "wallet" ? "fa-wallet" : "fa-money-bill-wave"}`} />
+                    </div>
+                    <div>
+                      <div className="co-payment-title">
+                        {paymentMethod === "upi" ? "UPI" : paymentMethod === "card" ? "Card" : paymentMethod === "netbanking" ? "Net Banking" : paymentMethod === "wallet" ? "Wallet" : "Cash on Delivery"}
+                        {" — "}
+                        {paymentDetail}
+                      </div>
+                      <div className="co-payment-sub">
+                        {paymentMethod === "cod" ? "Pay when your order arrives" : "You'll be asked to authorise this payment"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="co-card">
+                  <div className="co-card-head">
+                    <h2><div className="step-num">3</div> Order Items</h2>
+                    <Link href="/cart" className="co-card-edit"><i className="fas fa-pen" /> Edit cart</Link>
+                  </div>
+                  <div className="co-card-body">
+                    <div className="review-items">
+                      {orderLines.map((item) => {
+                        const qty = Number(item.qty) || 1;
+                        const price = Number(item.offerPrice) || 0;
+                        return (
+                          <div key={item.id} className="ri-card">
+                            <div className="ri-img">
+                              <img
+                                src={getImageUrl(item.primaryImage, "/placeholder.svg")}
+                                alt={item.itemName}
+                                loading="lazy"
+                                onError={(event) => {
+                                  const img = event.currentTarget;
+                                  img.onerror = null;
+                                  img.src = "/placeholder.svg";
+                                }}
+                              />
+                            </div>
+                            <div className="ri-body">
+                              <div className="ri-brand">{item.brandName || "Motabhai"}</div>
+                              <div className="ri-name">{item.itemName}</div>
+                              <div className="ri-meta">
+                                Qty: {qty}
+                                {item.variant ? ` · ${item.variant}` : ""}
+                                {item.colorName ? ` · ${item.colorName}` : ""}
+                              </div>
+                            </div>
+                            <div className="ri-price">
+                              <div className="rprice">Rs {formatRupees(price * qty)}</div>
+                              <div className="rqty">Rs {formatRupees(price)} each</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="co-card notice-box">
+                  <div className="co-card-body" style={{ padding: "16px 22px" }}>
+                    <div className="notice-head"><i className="fas fa-triangle-exclamation" /> Please review before placing your order</div>
+                    <div className="notice-item"><i className="fas fa-check" /> Returns accepted within 10 days of delivery</div>
+                    <div className="notice-item"><i className="fas fa-check" /> All products come with manufacturer warranty</div>
+                    <div className="notice-item"><i className="fas fa-check" /> By placing this order you agree to our <Link href="/faq">Terms &amp; Conditions</Link></div>
+                  </div>
+                </div>
+
+                <div className="step-actions">
+                  <button className="btn-back" type="button" onClick={() => goStep(2)}><i className="fas fa-arrow-left" /> Back</button>
+                  <button className="btn-next" type="button" onClick={placeOrder} disabled={isProcessing}>
+                    {isProcessing
+                      ? <><i className="fas fa-spinner fa-spin" /> Processing…</>
+                      : <><i className="fas fa-lock" /> Place Order Securely</>}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT: order summary */}
+            <div className="co-os-card">
+              <div className="co-os-title"><i className="fas fa-receipt" /> Order Summary</div>
+
+              <div className="co-os-items">
+                {orderLines.map((item) => {
+                  const qty = Number(item.qty) || 1;
+                  const price = Number(item.offerPrice) || 0;
+                  return (
+                    <div key={item.id} className="co-os-item">
+                      <div className="co-os-item-img">
+                        <img
+                          src={getImageUrl(item.primaryImage, "/placeholder.svg")}
+                          alt={item.itemName}
+                          loading="lazy"
+                          onError={(event) => {
+                            const img = event.currentTarget;
+                            img.onerror = null;
+                            img.src = "/placeholder.svg";
+                          }}
+                        />
+                      </div>
+                      <div className="co-os-item-info">
+                        <div className="co-os-item-name">{item.itemName}</div>
+                        <div className="co-os-item-qty">Qty: {qty}</div>
+                      </div>
+                      <div className="co-os-item-price">Rs {formatRupees(price * qty)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <hr className="co-os-divider" />
+
+              <div className="co-price-rows">
+                <div className="co-price-row">
+                  <span className="cpr-label">Subtotal ({totals.unitCount} item{totals.unitCount === 1 ? "" : "s"})</span>
+                  <span className="cpr-val">Rs {formatRupees(totals.subtotal)}</span>
+                </div>
+                {totals.productDiscount > 0 && (
+                  <div className="co-price-row saving">
+                    <span className="cpr-label">Product Discount</span>
+                    <span className="cpr-val">−Rs {formatRupees(totals.productDiscount)}</span>
+                  </div>
+                )}
+                {couponCode && (
+                  <div className="co-price-row saving">
+                    <span className="cpr-label">
+                      Coupon ({couponCode})
+                      <button className="co-coupon-remove" type="button" onClick={removeCoupon} title="Remove coupon">
+                        <i className="fas fa-xmark" />
+                      </button>
+                    </span>
+                    <span className="cpr-val">−Rs {formatRupees(totals.couponDiscount)}</span>
+                  </div>
+                )}
+                {totals.platformDiscount > 0 && (
+                  <div className="co-price-row saving">
+                    <span className="cpr-label">Platform Discount</span>
+                    <span className="cpr-val">−Rs {formatRupees(totals.platformDiscount)}</span>
+                  </div>
+                )}
+                <div className="co-price-row">
+                  <span className="cpr-label">Delivery</span>
+                  <span className="cpr-val" style={{ color: totals.deliveryCharge === 0 ? "#16a34a" : "#0f172a" }}>
+                    {totals.deliveryCharge === 0 ? "FREE" : `Rs ${formatRupees(totals.deliveryCharge)}`}
+                  </span>
+                </div>
+                {totals.codFee > 0 && (
+                  <div className="co-price-row">
+                    <span className="cpr-label">COD Handling Fee</span>
+                    <span className="cpr-val">Rs {formatRupees(totals.codFee)}</span>
+                  </div>
+                )}
+                <div className="co-price-row">
+                  <span className="cpr-label">GST</span>
+                  <span className="cpr-val">Rs {formatRupees(totals.tax)}</span>
+                </div>
+                <div className="co-price-row total">
+                  <span className="cpr-label">Total</span>
+                  <span className="cpr-val">Rs {formatRupees(totals.total)}</span>
+                </div>
+              </div>
+
+              {totals.totalSaving > 0 && (
+                <div className="co-savings-note">
+                  <i className="fas fa-tag" /> You save Rs {formatRupees(totals.totalSaving)} on this order!
+                </div>
+              )}
+
+              {couponCode && COUPONS[couponCode] && (
+                <div className="co-coupon-note">
+                  <i className="fas fa-ticket" /> {COUPONS[couponCode].label} — applied from your cart
+                </div>
+              )}
+
+              <button
+                className="place-order-btn"
+                type="button"
+                onClick={currentStep === 3 ? placeOrder : currentStep === 1 ? goToPayment : goToReview}
+                disabled={isProcessing || orderLines.length === 0}
+              >
+                {isProcessing
+                  ? <><i className="fas fa-spinner fa-spin" /> Processing…</>
+                  : currentStep === 3
+                    ? <><i className="fas fa-lock" /> Place Order · Rs {formatRupees(totals.total)}</>
+                    : <><i className="fas fa-arrow-right" /> {currentStep === 1 ? "Continue to Payment" : "Review Order"}</>}
+              </button>
+
+              <div className="co-trust-row">
+                <div className="co-trust-item"><i className="fas fa-shield-halved" /> Secure</div>
+                <div className="co-trust-item"><i className="fas fa-certificate" /> Genuine</div>
+                <div className="co-trust-item"><i className="fas fa-rotate-left" /> Easy Return</div>
               </div>
             </div>
           </div>
-
-          {/* RIGHT: Order Summary */}
-          <div className="co-os-card">
-            <div className="co-os-title"><i className="fas fa-receipt" /> Order Summary</div>
-
-            <div className="co-os-items">
-              {ORDER_ITEMS.map((item) => (
-                <div key={item.id} className="co-os-item">
-                  <div className="co-os-item-img"><img src={item.img} alt={item.name} loading="lazy" /></div>
-                  <div className="co-os-item-info">
-                    <div className="co-os-item-name">{item.name}</div>
-                    <div className="co-os-item-qty">Qty: {item.qty}</div>
-                  </div>
-                  <div className="co-os-item-price">Rs {(item.price * item.qty).toLocaleString()}</div>
-                </div>
-              ))}
-            </div>
-
-            <hr className="co-os-divider" />
-
-            <div className="co-price-rows">
-              <div className="co-price-row"><span className="cpr-label">Subtotal (4 items)</span><span className="cpr-val">Rs {subtotal.toLocaleString()}</span></div>
-              <div className="co-price-row saving"><span className="cpr-label">Product Discount</span><span className="cpr-val">−Rs {productDisc.toLocaleString()}</span></div>
-              <div className="co-price-row saving"><span className="cpr-label">Coupon (MOTAB10)</span><span className="cpr-val">−Rs {couponDisc.toLocaleString()}</span></div>
-              <div className="co-price-row"><span className="cpr-label">Delivery</span><span className="cpr-val" style={{ color: selectedDelivery.cost === 0 ? "#16a34a" : "#0f172a" }}>{selectedDelivery.cost === 0 ? "FREE" : `Rs ${selectedDelivery.cost}`}</span></div>
-              <div className="co-price-row"><span className="cpr-label">GST</span><span className="cpr-val">Rs {tax.toLocaleString()}</span></div>
-              <div className="co-price-row total"><span className="cpr-label">Total</span><span className="cpr-val">Rs {total.toLocaleString()}</span></div>
-            </div>
-            <div style={{ fontSize: "0.72rem", color: "#16a34a", fontWeight: 700, textAlign: "center", marginTop: -8 }}>
-              <i className="fas fa-tag" /> You save Rs {(productDisc + couponDisc - tax).toLocaleString()} on this order!
-            </div>
-
-            <button
-              className="place-order-btn"
-              onClick={currentStep === 3 ? placeOrder : () => goStep(Math.min(currentStep + 1, 3) as Step)}
-              disabled={isProcessing}
-            >
-              {isProcessing
-                ? <><i className="fas fa-spinner fa-spin" /> Processing...</>
-                : currentStep === 3
-                  ? <><i className="fas fa-lock" /> Place Order Securely</>
-                  : <><i className="fas fa-arrow-right" /> {currentStep === 1 ? "Continue to Payment" : "Review Order"}</>
-              }
-            </button>
-
-            <div className="co-trust-row">
-              <div className="co-trust-item"><i className="fas fa-shield-halved" /> Secure</div>
-              <div className="co-trust-item"><i className="fas fa-certificate" /> Genuine</div>
-              <div className="co-trust-item"><i className="fas fa-rotate-left" /> Easy Return</div>
-            </div>
-          </div>
-        </div>
+        )}
       </main>
 
-      {/* Success Overlay */}
-      <div className={`success-overlay${showSuccess ? " show" : ""}`}>
+      {/* Success overlay */}
+      <div className={`success-overlay${placedOrder ? " show" : ""}`}>
         <div className="success-modal">
           <div className="success-check"><i className="fas fa-check" /></div>
           <h2>Order Placed!</h2>
-          <p>Your order has been placed successfully. You&apos;ll receive a confirmation SMS and email shortly.</p>
+          <p>
+            Thanks {profile.firstName || "there"} — your order for{" "}
+            <strong>Rs {formatRupees(placedOrder?.totalAmount ?? 0)}</strong> is confirmed.
+            You&apos;ll receive a confirmation on {profile.phone || "your registered number"} shortly.
+          </p>
           <div className="order-id-box">
-            Order ID: <strong>{orderId}</strong>
-            <button className="order-id-copy" onClick={copyOrderId} title="Copy">
+            Order ID: <strong>{placedOrder?.orderNumber}</strong>
+            <button className="order-id-copy" type="button" onClick={copyOrderId} title="Copy">
               <i className="fas fa-copy" />
             </button>
           </div>
           <div className="delivery-promise">
             <i className="fas fa-truck-fast" />
-            <div>Expected delivery: <strong>Tomorrow</strong><br />Track your order anytime in My Account → Orders</div>
+            <div>
+              {placedOrder?.deliveryLabel || "Standard Delivery"} ·{" "}
+              {placedOrder?.paymentMethod === "cod" ? "Pay on delivery" : "Payment confirmed"}
+              <br />
+              Track your order anytime in My Account → Orders
+            </div>
           </div>
           <div className="success-actions">
-            <a href="#" className="sa-track"><i className="fas fa-map-pin" /> Track Order</a>
+            <Link href="/account#orders" className="sa-track"><i className="fas fa-map-pin" /> Track Order</Link>
             <Link href="/" className="sa-home"><i className="fas fa-house" /> Continue Shopping</Link>
           </div>
         </div>
       </div>
 
-      {/* Mini Footer */}
+      {/* Mini footer */}
       <div className="co-footer">
         <div className="co-footer-links">
           <Link href="/">© 2026 Motabhai Electronics</Link>
-          <Link href="#">Privacy Policy</Link>
-          <Link href="#">Terms & Conditions</Link>
-          <Link href="#">Contact Support</Link>
+          <Link href="/faq">Privacy Policy</Link>
+          <Link href="/faq">Terms &amp; Conditions</Link>
+          <Link href="/faq">Contact Support</Link>
         </div>
         <div className="co-footer-copy">All rights reserved.</div>
       </div>
 
       {/* Toasts */}
       <div className="co-toast-wrap">
-        {toasts.map((t) => (
-          <div key={t.id} className={`co-toast ${t.type}`}>
-            <i className={`fas ${t.type === "success" ? "fa-check-circle" : "fa-exclamation-circle"}`} />
-            {t.message}
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`co-toast ${toast.type}`}>
+            <i className={`fas ${toast.type === "success" ? "fa-check-circle" : "fa-exclamation-circle"}`} />
+            {toast.message}
           </div>
         ))}
       </div>

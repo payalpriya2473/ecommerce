@@ -12,6 +12,15 @@ import {
   type Item,
 } from "@/lib/api/publicApi";
 import { cartItemFromItem, useCart } from "@/lib/cart/cart-context";
+import { isLoggedIn, onCustomerAuthChange } from "@/lib/api/customerApi";
+import {
+  COUPONS,
+  computeOrderTotals,
+  formatRupees,
+  normalizeCouponCode,
+  readCheckoutCoupon,
+  saveCheckoutCoupon,
+} from "@/lib/pricing/order-pricing";
 import { useWishlist, wishlistItemFromCartItem } from "@/lib/wishlist/wishlist-context";
 import {
   buildProductDetailUrlForItem,
@@ -67,14 +76,6 @@ function getFamilyImage(
   return imagePool[(variantIndex >= 0 ? variantIndex : 0) % imagePool.length] ?? null;
 }
 
-// ─── Static Data ──────────────────────────────────────────────────────────────
-const COUPONS: Record<string, { pct?: number; flat?: number; max?: number; label: string }> = {
-  MOTAB10:   { pct: 10, max: 3000, label: "10% off up to Rs 3,000" },
-  HDFC5:     { pct: 5,  max: 2000, label: "5% off up to Rs 2,000 (HDFC)" },
-  NEWUSER15: { pct: 15, max: 2000, label: "15% off up to Rs 2,000" },
-  SAVE500:   { flat: 500, label: "Flat Rs 500 off" },
-};
-
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 function useCountdown() {
   const [time, setTime] = useState("04:22:15");
@@ -127,40 +128,39 @@ export default function CartPage() {
   const [recommendationPool, setRecommendationPool] = useState<Item[]>([]);
   const countdown = useCountdown();
   const toastIdRef = useRef(0);
+  const [isCustomer, setIsCustomer] = useState(false);
+
+  // Keep the login state in sync so checkout can be gated behind sign-in.
+  useEffect(() => {
+    const sync = () => setIsCustomer(isLoggedIn());
+    sync();
+    return onCustomerAuthChange(sync);
+  }, []);
+
+  // Restore a coupon that was applied earlier (also used by the checkout page).
+  useEffect(() => {
+    if (!hydrated) return;
+    const stored = readCheckoutCoupon();
+    if (stored) setAppliedCoupon(stored);
+  }, [hydrated]);
 
   // ── Derived state ──
-  // FIX: Use all items for quantity badge, but only selected for price calculation
+  // Only ticked items are priced (and only those get carried into checkout).
   const selectedItems = cartItems.filter((i) => i.selected !== false);
 
-  // FIX: Safely coerce prices to numbers to avoid NaN in calculations
-  const subtotal = selectedItems.reduce((s, i) => {
-    const price = Number(i.offerPrice) || 0;
-    const qty = Number(i.qty) || 1;
-    return s + price * qty;
-  }, 0);
-
-  const originalTotal = selectedItems.reduce((s, i) => {
-    // Use originalPrice if available and greater, otherwise fall back to offerPrice
-    const orig = Number(i.originalPrice) || Number(i.offerPrice) || 0;
-    const qty = Number(i.qty) || 1;
-    return s + orig * qty;
-  }, 0);
-
-  const productDiscount = Math.max(0, originalTotal - subtotal);
-  const delivery = subtotal >= 999 ? 0 : 99;
-
-  const couponDisc = (() => {
-    if (!appliedCoupon) return 0;
-    const c = COUPONS[appliedCoupon];
-    if (!c) return 0;
-    if (c.flat) return Math.min(c.flat, subtotal);
-    return Math.min(Math.floor(subtotal * (c.pct! / 100)), c.max!);
-  })();
-
-  const platformDisc = subtotal > 50000 ? 500 : 0;
-  const tax = Math.round((subtotal - couponDisc - platformDisc) * 0.018);
-  const total = Math.max(0, subtotal - couponDisc - platformDisc + delivery + tax);
-  const totalSaving = productDiscount + couponDisc + platformDisc - tax;
+  // All money maths lives in lib/pricing/order-pricing so the cart, the
+  // checkout page and the backend agree on every number.
+  const totals = computeOrderTotals(selectedItems, { couponCode: appliedCoupon });
+  const {
+    subtotal,
+    productDiscount,
+    couponDiscount: couponDisc,
+    platformDiscount: platformDisc,
+    deliveryCharge: delivery,
+    tax,
+    total,
+    totalSaving,
+  } = totals;
 
   // ── Toast ──
   const showToast = useCallback((message: string, type: "success" | "warning" = "success") => {
@@ -216,12 +216,14 @@ export default function CartPage() {
 
   // ── Coupon ──
   const applyCoupon = (code?: string) => {
-    const c = (code || couponInput).trim().toUpperCase();
-    if (!c) { showToast("Please enter a coupon code", "warning"); return; }
-    if (COUPONS[c]) {
-      setAppliedCoupon(c);
+    const raw = (code || couponInput).trim();
+    if (!raw) { showToast("Please enter a coupon code", "warning"); return; }
+    const normalized = normalizeCouponCode(raw);
+    if (normalized) {
+      setAppliedCoupon(normalized);
+      saveCheckoutCoupon(normalized);
       setCouponInput("");
-      showToast(`Coupon ${c} applied successfully!`);
+      showToast(`Coupon ${normalized} applied successfully!`);
     } else {
       showToast("Invalid coupon code", "warning");
     }
@@ -229,7 +231,23 @@ export default function CartPage() {
 
   const removeCoupon = () => {
     setAppliedCoupon(null);
+    saveCheckoutCoupon(null);
     showToast("Coupon removed", "warning");
+  };
+
+  // ── Checkout ──
+  const goToCheckout = () => {
+    if (selectedItems.length === 0) {
+      showToast("Select at least one item to check out", "warning");
+      return;
+    }
+    saveCheckoutCoupon(appliedCoupon);
+    if (!isCustomer) {
+      showToast("Please sign in to complete your order");
+      router.push("/login?redirect=/checkout");
+      return;
+    }
+    router.push("/checkout");
   };
 
   const allSelected = cartItems.length > 0 && cartItems.every((i) => i.selected !== false);
@@ -416,9 +434,9 @@ export default function CartPage() {
               <div className="offer-strip">
                 <i className="fas fa-fire-flame-curved" />
                 <div className="offer-strip-text">
-                  You&apos;re saving <strong>Rs {productDiscount.toLocaleString()}</strong> on your current cart.
+                  You&apos;re saving <strong>Rs {formatRupees(productDiscount)}</strong> on your current cart.
                   {subtotal < 999 && (
-                    <> Add items worth <strong>Rs {(999 - subtotal).toLocaleString()}</strong> more to unlock free delivery!</>
+                    <> Add items worth <strong>Rs {formatRupees(totals.freeDeliveryShortfall)}</strong> more to unlock free delivery!</>
                   )}
                 </div>
                 <Link href="/products" className="offer-strip-cta">Shop More</Link>
@@ -789,24 +807,24 @@ export default function CartPage() {
                   <span className="pr-label">
                     <i className="fas fa-bag-shopping" /> Price ({selectedItems.length} item{selectedItems.length !== 1 ? "s" : ""})
                   </span>
-                  <span className="pr-val">Rs {subtotal.toLocaleString("en-IN")}</span>
+                  <span className="pr-val">Rs {formatRupees(subtotal)}</span>
                 </div>
                 {productDiscount > 0 && (
                   <div className="price-row saving">
                     <span className="pr-label"><i className="fas fa-tag" /> Product Discount</span>
-                    <span className="pr-val">− Rs {productDiscount.toLocaleString("en-IN")}</span>
+                    <span className="pr-val">− Rs {formatRupees(productDiscount)}</span>
                   </div>
                 )}
                 {couponDisc > 0 && (
                   <div className="price-row saving">
                     <span className="pr-label"><i className="fas fa-ticket" /> Coupon ({appliedCoupon})</span>
-                    <span className="pr-val">− Rs {couponDisc.toLocaleString("en-IN")}</span>
+                    <span className="pr-val">− Rs {formatRupees(couponDisc)}</span>
                   </div>
                 )}
                 {platformDisc > 0 && (
                   <div className="price-row saving">
                     <span className="pr-label"><i className="fas fa-star" /> Platform Discount</span>
-                    <span className="pr-val">− Rs {platformDisc.toLocaleString("en-IN")}</span>
+                    <span className="pr-val">− Rs {formatRupees(platformDisc)}</span>
                   </div>
                 )}
                 <div className="price-row">
@@ -819,18 +837,18 @@ export default function CartPage() {
                 </div>
                 <div className="price-row">
                   <span className="pr-label"><i className="fas fa-file-invoice" /> GST (applicable)</span>
-                  <span className="pr-val">Rs {tax.toLocaleString("en-IN")}</span>
+                  <span className="pr-val">Rs {formatRupees(tax)}</span>
                 </div>
                 <div className="price-row total">
                   <div>
                     <div className="pr-label">Total Amount</div>
                     {totalSaving > 0 && (
                       <div className="total-note" style={{ color: "#16a34a", fontWeight: 700 }}>
-                        You Save Rs {Math.max(0, totalSaving).toLocaleString("en-IN")} on this order!
+                        You Save Rs {formatRupees(Math.max(0, totalSaving))} on this order!
                       </div>
                     )}
                   </div>
-                  <span className="pr-val">Rs {total.toLocaleString("en-IN")}</span>
+                  <span className="pr-val">Rs {formatRupees(total)}</span>
                 </div>
               </div>
 
@@ -839,7 +857,7 @@ export default function CartPage() {
                 <div className="emi-note">
                   <i className="fas fa-credit-card" />
                   <div>
-                    No-Cost EMI available from <strong>Rs {Math.round(total / 12).toLocaleString("en-IN")}/mo</strong> on HDFC, SBI &amp; 4 more cards.{" "}
+                    No-Cost EMI available from <strong>Rs {formatRupees(Math.round(total / 12))}/mo</strong> on HDFC, SBI &amp; 4 more cards.{" "}
                     <Link href="/offers" style={{ color: "#2563eb", fontWeight: 700 }}>View all offers →</Link>
                   </div>
                 </div>
@@ -855,15 +873,22 @@ export default function CartPage() {
               </div>
 
               {/* Checkout */}
-              <Link
-                href="/checkout"
+              <button
+                type="button"
                 className="checkout-btn"
-                style={{ pointerEvents: total === 0 ? "none" : "auto", opacity: total === 0 ? 0.5 : 1 }}
+                onClick={goToCheckout}
+                disabled={selectedItems.length === 0}
+                style={{ opacity: selectedItems.length === 0 ? 0.55 : 1 }}
               >
                 <i className="fas fa-lock" />
-                Proceed to Checkout &nbsp;·&nbsp; Rs {total.toLocaleString("en-IN")}
+                Proceed to Checkout &nbsp;·&nbsp; Rs {formatRupees(total)}
                 <i className="fas fa-arrow-right" />
-              </Link>
+              </button>
+              {!isCustomer && hydrated && (
+                <div className="checkout-signin-note">
+                  <i className="fas fa-circle-info" /> You&apos;ll be asked to sign in before placing the order.
+                </div>
+              )}
 
               {/* Safety */}
               <div className="safety-badges">

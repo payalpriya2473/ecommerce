@@ -329,3 +329,12 @@
     width: 205px;
   }
 }
+
+/* Account action label (shows the customer's first name once signed in) */
+.sf-account-action span {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: capitalize;
+}

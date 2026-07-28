@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getImageUrl } from "@/lib/api/publicApi";
-import { customerAuthAPI } from "@/lib/api/customerApi";
+import { customerAuthAPI, isLoggedIn, onCustomerAuthChange } from "@/lib/api/customerApi";
 import { useCart } from "@/lib/cart/cart-context";
 import { useWishlist } from "@/lib/wishlist/wishlist-context";
 import { useAccount, AccountAddress, AccountPanelSettingKey } from "@/lib/account/account-context";
@@ -165,6 +165,15 @@ export default function AccountPage() {
     window.location.href = "/login";
   };
 
+  // ── Sign-in state: /account is only meaningful for a logged-in customer ──
+  const [authState, setAuthState] = useState<"checking" | "guest" | "member">("checking");
+
+  useEffect(() => {
+    const sync = () => setAuthState(isLoggedIn() ? "member" : "guest");
+    sync();
+    return onCustomerAuthChange(sync);
+  }, []);
+
   useEffect(() => {
     const syncPanelFromHash = () => {
       const hash = window.location.hash.replace("#", "");
@@ -312,6 +321,37 @@ export default function AccountPage() {
       ],
     },
   ];
+
+  if (authState !== "member") {
+    return (
+      <div className="acc-root">
+        <div className="acc-breadcrumb-bar"><div className="acc-breadcrumb">
+          <Link href="/">Home</Link><i className="fas fa-chevron-right acc-sep" />
+          <span className="acc-current">My Account</span>
+        </div></div>
+
+        <div className="acc-signin-gate">
+          <div className="acc-signin-icon"><i className="fas fa-user-lock" /></div>
+          <h2>{authState === "checking" ? "Checking your session…" : "Sign in to view your account"}</h2>
+          <p>
+            {authState === "checking"
+              ? "One moment while we load your details."
+              : "Your profile, orders, saved addresses and wishlist all live here once you're signed in."}
+          </p>
+          {authState === "guest" && (
+            <div className="acc-signin-actions">
+              <Link href="/login?redirect=/account" className="acc-signin-primary">
+                <i className="fas fa-right-to-bracket" /> Sign In / Register
+              </Link>
+              <Link href="/products" className="acc-signin-outline">
+                <i className="fas fa-store" /> Continue Shopping
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="acc-root">

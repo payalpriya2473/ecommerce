@@ -476,6 +476,7 @@ export default function ProductDetail() {
   const mrp = selectedVariant ? getItemOriginalPrice(selectedVariant) : 0;
   const disc = getDiscount(price, mrp);
   const inStock = isItemInStock(selectedVariant ?? item);
+  const purchaseTarget = selectedVariant ?? item;
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const loadItem = useCallback(async () => {
@@ -1134,6 +1135,34 @@ export default function ProductDetail() {
                   Add to Cart  = red gradient  (was Amazon yellow)
                   Buy Now      = orange/accent  (was Amazon orange-brown)
                   ════════════════════════════════════════════════ */}
+              <div ref={actionRef} className="pd-action-btns">
+                <button
+                  type="button"
+                  className={`pd-btn-cart${!inStock ? " is-unavailable" : ""}`}
+                  onClick={() => purchaseTarget && handleAddToCart(purchaseTarget)}
+                  disabled={!inStock || !purchaseTarget}
+                >
+                  <i className={`fas ${inStock ? "fa-cart-plus" : "fa-ban"}`} />{" "}
+                  {inStock ? "Add to Cart" : "Unavailable"}
+                </button>
+                <button
+                  type="button"
+                  className={`pd-btn-buy${!inStock ? " is-notify" : ""}`}
+                  onClick={() => purchaseTarget && handleBuyNow(purchaseTarget)}
+                  disabled={!inStock || !purchaseTarget}
+                >
+                  <i className={`fas ${inStock ? "fa-bolt" : "fa-bell"}`} />{" "}
+                  {inStock ? "Buy Now" : "Notify Me"}
+                </button>
+              </div>
+              {!inStock && (
+                <div className="pd-stock-note" role="status" aria-live="polite">
+                  <div className="pd-stock-note-title">Coming Soon</div>
+                  <div className="pd-stock-note-copy">
+                    Out of stock right now. This product is still visible, and you can use Notify Me when it is available again.
+                  </div>
+                </div>
+              )}
               {/* <div ref={actionRef} className="pd-action-btns">
                 <button
                   type="button"
@@ -1575,6 +1604,26 @@ export default function ProductDetail() {
                     )}
                   </div>
                 </div>
+              </div>
+              <div className="pd-sticky-btns">
+                <button
+                  type="button"
+                  className="pd-sticky-cart"
+                  onClick={() => purchaseTarget && handleAddToCart(purchaseTarget)}
+                  disabled={!inStock || !purchaseTarget}
+                >
+                  <i className={`fas ${inStock ? "fa-cart-plus" : "fa-ban"}`} />{" "}
+                  {inStock ? "Add to Cart" : "Unavailable"}
+                </button>
+                <button
+                  type="button"
+                  className="pd-sticky-buy"
+                  onClick={() => purchaseTarget && handleBuyNow(purchaseTarget)}
+                  disabled={!inStock || !purchaseTarget}
+                >
+                  <i className={`fas ${inStock ? "fa-bolt" : "fa-bell"}`} />{" "}
+                  {inStock ? "Buy Now" : "Notify Me"}
+                </button>
               </div>
               {/* <div className="pd-sticky-btns">
                 <button

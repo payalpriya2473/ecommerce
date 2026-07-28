@@ -492,6 +492,108 @@ export const customerCartAPI = {
   normalizeItem: normalizeCartItem,
 };
 
+// ─── ORDER APIs ──────────────────────────────────────────────────────────────
+
+export interface CustomerOrderItem {
+  id: string;
+  itemId: string | null;
+  itemName: string;
+  brandName?: string | null;
+  categoryName?: string | null;
+  variant?: string | null;
+  colorName?: string | null;
+  primaryImage?: string | null;
+  qty: number;
+  unitPrice: number;
+  originalPrice: number;
+  gst: number;
+  lineTotal: number;
+}
+
+export interface CustomerOrder {
+  id: string;
+  orderNumber: string;
+  status: "processing" | "shipped" | "delivered" | "cancelled" | "returned";
+  statusLabel: string;
+  placedAt: string;
+  updatedAt?: string | null;
+  cancelledAt?: string | null;
+  paymentMethod: string;
+  paymentDetail?: string | null;
+  paymentStatus: "pending" | "paid" | "failed" | "refunded";
+  deliveryType: string;
+  deliveryLabel?: string | null;
+  couponCode?: string | null;
+  subtotal: number;
+  productDiscount: number;
+  couponDiscount: number;
+  platformDiscount: number;
+  deliveryCharge: number;
+  codFee: number;
+  taxAmount: number;
+  totalAmount: number;
+  address: {
+    id: string | null;
+    type: string;
+    name: string;
+    phone: string;
+    line1: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    pinCode?: string;
+  };
+  items: CustomerOrderItem[];
+  unavailable?: string[];
+}
+
+export interface PlaceOrderPayload {
+  items: Array<{
+    itemId: string | number | null;
+    qty: number;
+    unitPrice?: number;
+    originalPrice?: number;
+    itemName?: string;
+    brandName?: string | null;
+    categoryName?: string | null;
+    variant?: string | null;
+    colorName?: string | null;
+    primaryImage?: string | null;
+    gst?: number | null;
+  }>;
+  addressId?: string | number | null;
+  address?: {
+    type?: string;
+    name: string;
+    phone: string;
+    line1: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    pinCode?: string;
+  };
+  paymentMethod: "upi" | "card" | "netbanking" | "wallet" | "cod";
+  paymentDetail?: string | null;
+  deliveryType?: "free" | "express" | "scheduled";
+  couponCode?: string | null;
+  notes?: string | null;
+}
+
+export const customerOrderAPI = {
+  getAll: () => apiFetch<CustomerOrder[]>(`${BASE}/orders`),
+
+  getOne: (id: string | number) => apiFetch<CustomerOrder>(`${BASE}/orders/${id}`),
+
+  place: (payload: PlaceOrderPayload) =>
+    apiFetch<CustomerOrder>(`${BASE}/orders`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  cancel: (id: string | number) =>
+    apiFetch<CustomerOrder>(`${BASE}/orders/${id}/cancel`, { method: "POST" }),
+};
+
 // ─── PROFILE APIs ────────────────────────────────────────────────────────────
 
 export const customerProfileAPI = {

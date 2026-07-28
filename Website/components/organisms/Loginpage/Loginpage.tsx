@@ -205,9 +205,22 @@ export default function LoginPage() {
     await syncAfterLogin(data.accessToken);
     window.dispatchEvent(new Event(CUSTOMER_AUTH_EVENT));
     setSuccessTitle(isRegister ? `Welcome to Motabhai! 🎉` : `Welcome Back, ${data.customer.firstName || ""}!`);
-    setSuccessSub(isRegister ? "Your account is ready. You earned Rs 200 welcome bonus!" : "You're now signed in. Redirecting...");
+    // Return the customer to wherever they came from (e.g. ?redirect=/checkout)
+    const requestedRedirect = new URLSearchParams(window.location.search).get("redirect");
+    const redirectTarget =
+      requestedRedirect && requestedRedirect.startsWith("/") && !requestedRedirect.startsWith("//")
+        ? requestedRedirect
+        : "/account";
+
+    setSuccessSub(
+      isRegister
+        ? "Your account is ready. You earned Rs 200 welcome bonus!"
+        : redirectTarget === "/checkout"
+          ? "You're now signed in. Taking you back to checkout..."
+          : "You're now signed in. Redirecting..."
+    );
     setMode("success");
-    setTimeout(() => { window.location.href = "/account"; }, 2500);
+    setTimeout(() => { window.location.href = redirectTarget; }, 2500);
   };
 
   // ─── Login ──────────────────────────────────────────────────────────────

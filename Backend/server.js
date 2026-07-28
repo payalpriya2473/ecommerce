@@ -27,6 +27,7 @@ import customerAuthRouter    from "./routes/customerAuth.js";
 import customerWishlistRouter from "./routes/customerWishlist.js";
 import customerCartRouter    from "./routes/customerCart.js";
 import customerProfileRouter from "./routes/customerProfile.js";
+import customerOrdersRouter  from "./routes/customerOrders.js";
 import stockRoutes from './routes/stockRoutes.js';
 import emailConfigRoutes from './routes/emailConfigRoutes.js';
 import { startStockSyncCron } from './cron/syncStockCron.js';
@@ -174,6 +175,7 @@ router.use("/api/customer/auth",     customerAuthRouter);
 router.use("/api/customer/wishlist", customerWishlistRouter);
 router.use("/api/customer/cart",     customerCartRouter);
 router.use("/api/customer/profile",  customerProfileRouter);
+router.use("/api/customer/orders",   customerOrdersRouter);
 
 router.use('/api/stock', stockRoutes);
 

@@ -44,7 +44,7 @@
 /* =====================================================================
    ANIMATIONS
    ===================================================================== */
-@keyframes marquee {
+@keyframes pd-marquee {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
@@ -58,14 +58,14 @@
   70% { transform: scale(0.9); }
   100% { opacity: 1; transform: scale(1); }
 }
-@keyframes fadeInUp {
+@keyframes pd-toast-in {
   from { opacity: 0; transform: translateY(20px) translateX(-50%); }
   to { opacity: 1; transform: translateY(0) translateX(-50%); }
 }
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
-@keyframes float {
+@keyframes pd-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
 }
@@ -88,7 +88,7 @@
 .pd-ann-track {
   display: flex;
   gap: 60px;
-  animation: marquee 25s linear infinite;
+  animation: pd-marquee 25s linear infinite;
   white-space: nowrap;
 }
 .pd-ann-item {
@@ -1635,6 +1635,14 @@
   transform: translateY(-1px);
   filter: brightness(1.02);
 }
+.pd-sticky-cart:disabled,
+.pd-sticky-buy:disabled {
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+  box-shadow: none;
+  opacity: 0.82;
+}
 
 /* =====================================================================
    FOOTER â€” Motabhai branded dark footer
@@ -1750,7 +1758,7 @@
   font-size: 0.88rem;
   font-weight: 600;
   box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-  animation: fadeInUp 0.3s ease;
+  animation: pd-toast-in 0.3s ease;
   white-space: nowrap;
 }
 .pd-toast i { color: #10b981; }
@@ -1792,6 +1800,18 @@
   .pd-trust-badges { grid-template-columns: repeat(2, 1fr); }
   .pd-offers-grid { grid-template-columns: 1fr; }
   .pd-action-btns { flex-direction: column; }
+  .pd-action-btns button,
+  .pd-sticky-btns button {
+    width: 100%;
+  }
+  .pd-sticky-btns {
+    flex-direction: column;
+    width: 100%;
+  }
+  .pd-sticky-cart,
+  .pd-sticky-buy {
+    justify-content: center;
+  }
   .pd-footer-top { grid-template-columns: 1fr 1fr; gap: 28px; }
   .pd-sticky-info .pd-sticky-icon { display: none; }
   .pd-btt { bottom: 85px; right: 16px; }
