@@ -397,7 +397,7 @@ export default function CartPage() {
       </div>
 
       {/* Main */}
-      <main style={{ background: "#f8fafc", minHeight: "60vh" }}>
+      <main style={{ background: "var(--bg)", minHeight: "60vh" }}>
         {!hydrated ? (
           <div style={{ minHeight: "60vh" }} />
         ) : cartItems.length === 0 ? (
@@ -493,7 +493,7 @@ export default function CartPage() {
                       />
                     </div>
                     <div className="ci-body">
-                      <div className="ci-brand">{item.brandName ?? "Motabhai"}</div>
+                      <div className="ci-brand">{item.brandName ?? "AppleNext"}</div>
                       <div className="ci-name">
                         <Link href={productHref}>{item.itemName || "Product"}</Link>
                       </div>
@@ -518,7 +518,7 @@ export default function CartPage() {
                         )}
                         <span className="ci-chip">
                           <i className="fas fa-store" style={{ marginRight: 4 }} />
-                          Motabhai Official
+                          AppleNext Official
                         </span>
                       </div>
                       <div className="ci-rating">
@@ -609,7 +609,7 @@ export default function CartPage() {
                 <div className="saved-header" onClick={() => setSavedOpen(!savedOpen)}>
                   <h3>
                     <i className="fas fa-bookmark" /> Saved for Later{" "}
-                    <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: "0.85rem" }}>
+                    <span style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: "0.85rem" }}>
                       ({savedItems.length} items)
                     </span>
                   </h3>
@@ -681,7 +681,7 @@ export default function CartPage() {
                       );
                     })}
                     {savedItems.length === 0 && (
-                      <p style={{ color: "#94a3b8", fontSize: "0.85rem", padding: "16px 0" }}>
+                      <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", padding: "16px 0" }}>
                         No items saved for later.
                       </p>
                     )}
@@ -829,9 +829,9 @@ export default function CartPage() {
                 )}
                 <div className="price-row">
                   <span className="pr-label"><i className="fas fa-truck" /> Delivery Charges</span>
-                  <span className="pr-val" style={{ color: delivery === 0 ? "#16a34a" : "#0f172a" }}>
+                  <span className="pr-val" style={{ color: delivery === 0 ? "var(--success)" : "var(--ink)" }}>
                     {delivery === 0
-                      ? <><i className="fas fa-check" style={{ color: "#22c55e", marginRight: 4 }} />FREE</>
+                      ? <><i className="fas fa-check" style={{ color: "var(--success)", marginRight: 4 }} />FREE</>
                       : `Rs ${delivery}`}
                   </span>
                 </div>
@@ -843,7 +843,7 @@ export default function CartPage() {
                   <div>
                     <div className="pr-label">Total Amount</div>
                     {totalSaving > 0 && (
-                      <div className="total-note" style={{ color: "#16a34a", fontWeight: 700 }}>
+                      <div className="total-note" style={{ color: "var(--success)", fontWeight: 700 }}>
                         You Save Rs {formatRupees(Math.max(0, totalSaving))} on this order!
                       </div>
                     )}
@@ -858,7 +858,7 @@ export default function CartPage() {
                   <i className="fas fa-credit-card" />
                   <div>
                     No-Cost EMI available from <strong>Rs {formatRupees(Math.round(total / 12))}/mo</strong> on HDFC, SBI &amp; 4 more cards.{" "}
-                    <Link href="/offers" style={{ color: "#2563eb", fontWeight: 700 }}>View all offers →</Link>
+                    <Link href="/offers" style={{ color: "var(--info)", fontWeight: 700 }}>View all offers →</Link>
                   </div>
                 </div>
               )}
@@ -906,7 +906,7 @@ export default function CartPage() {
       <footer className="footer">
         <div className="footer-top">
           <div>
-            <div className="footer-logo">MOTABHAI</div>
+            <div className="footer-logo">APPLENEXT</div>
             <p className="footer-desc">
               Your one-stop destination for the latest electronics, mobile phones, laptops, and
               home appliances at the best prices with genuine warranty.
@@ -927,7 +927,7 @@ export default function CartPage() {
           ))}
         </div>
         <div className="footer-bottom">
-          <p>&copy; 2026 Motabhai Electronics. All rights reserved.</p>
+          <p>&copy; 2026 AppleNext Electronics. All rights reserved.</p>
           <div className="footer-payments">
             {["Visa", "Mastercard", "UPI", "Net Banking", "EMI"].map((m) => <span key={m}>{m}</span>)}
           </div>

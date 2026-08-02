@@ -17,7 +17,7 @@ const perks = [
   { icon: "fas fa-gift", title: "Rs 200 Welcome Bonus", desc: "New members get flat Rs 200 off on first order" },
   { icon: "fas fa-bolt", title: "Early Access to Deals", desc: "Flash sales, exclusive offers before anyone else" },
   { icon: "fas fa-truck-fast", title: "Order Tracking", desc: "Real-time updates from dispatch to doorstep" },
-  { icon: "fas fa-star", title: "Loyalty Rewards", desc: "Earn MB Points on every purchase" },
+  { icon: "fas fa-star", title: "Loyalty Rewards", desc: "Earn AppleNext Points on every purchase" },
 ];
 
 function getPwdStrength(val: string) {
@@ -105,7 +105,7 @@ export default function LoginPage() {
   const [otpTimerActive, setOtpTimerActive] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [successTitle, setSuccessTitle] = useState("Welcome to Motabhai!");
+  const [successTitle, setSuccessTitle] = useState("Welcome to AppleNext!");
   const [successSub, setSuccessSub] = useState("Your account has been created.");
 
   // Login fields
@@ -204,7 +204,7 @@ export default function LoginPage() {
     saveCustomer(data.customer as Parameters<typeof saveCustomer>[0]);
     await syncAfterLogin(data.accessToken);
     window.dispatchEvent(new Event(CUSTOMER_AUTH_EVENT));
-    setSuccessTitle(isRegister ? `Welcome to Motabhai! 🎉` : `Welcome Back, ${data.customer.firstName || ""}!`);
+    setSuccessTitle(isRegister ? `Welcome to AppleNext! 🎉` : `Welcome Back, ${data.customer.firstName || ""}!`);
     // Return the customer to wherever they came from (e.g. ?redirect=/checkout)
     const requestedRedirect = new URLSearchParams(window.location.search).get("redirect");
     const redirectTarget =
@@ -379,7 +379,7 @@ export default function LoginPage() {
         <div className="lp-left-panel">
           <div className="lp-orb lp-orb-1" /><div className="lp-orb lp-orb-2" /><div className="lp-orb lp-orb-3" />
           <div className="lp-left-content">
-            <div className="lp-left-brand"><div className="lp-left-brand-icon">M</div><div className="lp-left-brand-name">Motabhai</div></div>
+            <div className="lp-left-brand"><div className="lp-left-brand-icon">A</div><div className="lp-left-brand-name">AppleNext</div></div>
             <div className="lp-left-headline">India&apos;s Most Trusted<br /><span>Electronics Store</span></div>
             <div className="lp-left-sub">Join 50 lakh+ happy customers. Get exclusive deals, track orders, and manage everything in one place.</div>
             <div className="lp-left-perks">
@@ -406,7 +406,7 @@ export default function LoginPage() {
             {mode === "login" && (
               <div className="lp-form-panel">
                 <div className="lp-form-title">Welcome back!</div>
-                <div className="lp-form-subtitle">Sign in to your Motabhai account to continue</div>
+                <div className="lp-form-subtitle">Sign in to your AppleNext account to continue</div>
                 <div className="lp-social-row">
                   <button className="lp-social-btn" onClick={() => socialLogin("google")}><i className="fab fa-google lp-g-icon" /> Continue with Google</button>
                   <button className="lp-social-btn" onClick={() => socialLogin("facebook")}><i className="fab fa-facebook lp-fb-icon" /> Facebook</button>
@@ -445,7 +445,7 @@ export default function LoginPage() {
             {mode === "register" && (
               <div className="lp-form-panel">
                 <div className="lp-form-title">Create Account</div>
-                <div className="lp-form-subtitle">Join Motabhai and get Rs 200 off your first order!</div>
+                <div className="lp-form-subtitle">Join AppleNext and get Rs 200 off your first order!</div>
                 <div className="lp-social-row">
                   <button className="lp-social-btn" onClick={() => socialLogin("google")}><i className="fab fa-google lp-g-icon" /> Sign up with Google</button>
                   <button className="lp-social-btn" onClick={() => socialLogin("facebook")}><i className="fab fa-facebook lp-fb-icon" /> Facebook</button>
@@ -510,7 +510,7 @@ export default function LoginPage() {
                 </div>
                 <div className="lp-agree-row">
                   <input type="checkbox" id="agreeChk" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-                  <label htmlFor="agreeChk">I agree to Motabhai&apos;s <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.</label>
+                  <label htmlFor="agreeChk">I agree to AppleNext&apos;s <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.</label>
                 </div>
                 <button className="lp-submit-btn" disabled={loading} onClick={doRegister}>
                   {loading ? <><i className="fas fa-spinner fa-spin" /> Please wait...</> : <><i className="fas fa-user-plus" /> Create My Account</>}
@@ -643,7 +643,7 @@ export default function LoginPage() {
             <Link key={l.href} href={l.href}><i className={l.icon} /> {l.label}</Link>
           ))}
         </div>
-        <div className="lp-footer-copy">&copy; 2026 Motabhai Electronics. All rights reserved.</div>
+        <div className="lp-footer-copy">&copy; 2026 AppleNext Electronics. All rights reserved.</div>
       </footer>
 
       <div className="lp-toast-wrap">

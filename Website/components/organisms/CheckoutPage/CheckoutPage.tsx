@@ -15,11 +15,14 @@ import { useCart } from "@/lib/cart/cart-context";
 import { getImageUrl } from "@/lib/api/publicApi";
 import {
   customerOrderAPI,
+  customerPaymentAPI,
   isLoggedIn,
   onCustomerAuthChange,
   type CustomerOrder,
+  type PaymentConfig,
   type PlaceOrderPayload,
 } from "@/lib/api/customerApi";
+import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/payments/razorpay";
 import {
   COUPONS,
   DELIVERY_OPTIONS,
@@ -65,10 +68,10 @@ const PINCODE_MAP: Record<string, { city: string; state: string }> = {
 };
 
 const UPI_APPS = [
-  { name: "GPay", label: "Google Pay", style: { background: "#e8f5e9", color: "#34a853" }, icon: "fab fa-google-pay" },
-  { name: "PhonePe", label: "PhonePe", style: { background: "#f3e8ff", color: "#7c3aed" }, icon: "fas fa-bolt" },
-  { name: "Paytm", label: "Paytm", style: { background: "#eff6ff", color: "#1d4ed8" }, text: "Pay" },
-  { name: "BHIM", label: "BHIM UPI", style: { background: "#fff1f2", color: "#dc2626" }, text: "BHIM" },
+  { name: "GPay", label: "Google Pay", style: { background: "var(--success-tint)", color: "#34a853" }, icon: "fab fa-google-pay" },
+  { name: "PhonePe", label: "PhonePe", style: { background: "var(--bg-subtle)", color: "#7c3aed" }, icon: "fas fa-bolt" },
+  { name: "Paytm", label: "Paytm", style: { background: "var(--info-tint)", color: "var(--info-strong)" }, text: "Pay" },
+  { name: "BHIM", label: "BHIM UPI", style: { background: "var(--brand-tint)", color: "var(--brand)" }, text: "BHIM" },
 ];
 
 const BANKS = [
@@ -172,6 +175,8 @@ export default function CheckoutPage() {
 
   const [couponCode, setCouponCode] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingLabel, setProcessingLabel] = useState("Processing…");
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   const [placedOrder, setPlacedOrder] = useState<CustomerOrder | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastIdRef = useRef(0);
@@ -195,6 +200,17 @@ export default function CheckoutPage() {
       router.replace("/login?redirect=/checkout");
     }
   }, [authState, placedOrder, router]);
+
+  // ── Is the online payment gateway switched on? ────────────────────────────
+  useEffect(() => {
+    let ignore = false;
+    customerPaymentAPI.getConfig().then((response) => {
+      if (!ignore && response.success && response.data) setPaymentConfig(response.data);
+    });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   // ── Coupon handed over from the cart page ─────────────────────────────────
   useEffect(() => {
@@ -253,6 +269,9 @@ export default function CheckoutPage() {
   const addressError = !selectedAddress ? "Please add or select a delivery address" : null;
 
   const paymentError = useMemo(() => {
+    if (paymentMethod !== "cod" && paymentConfig && !paymentConfig.enabled) {
+      return "Online payment isn't available right now — please choose Cash on Delivery";
+    }
     if (paymentMethod === "upi") {
       const typed = upiId.trim();
       if (typed && !/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(typed)) return "Enter a valid UPI ID (e.g. name@bank)";
@@ -268,7 +287,7 @@ export default function CheckoutPage() {
     if (paymentMethod === "netbanking" && !bank) return "Select a bank to continue";
     if (paymentMethod === "wallet" && !wallet) return "Select a wallet to continue";
     return null;
-  }, [paymentMethod, upiId, card, bank, wallet]);
+  }, [paymentMethod, upiId, card, bank, wallet, paymentConfig]);
 
   // ── Step navigation ───────────────────────────────────────────────────────
   const goStep = useCallback((step: Step) => {
@@ -372,6 +391,20 @@ export default function CheckoutPage() {
     }
   }, []);
 
+  /** Success path shared by COD and by a verified online payment. */
+  const finishOrder = useCallback(
+    (order: CustomerOrder) => {
+      setPlacedOrder(order);
+      addOrder(orderFromApi(order));
+      clearCart();
+      clearCheckoutCoupon();
+      setCouponCode(null);
+      launchConfetti();
+      void refreshOrders();
+    },
+    [addOrder, clearCart, launchConfetti, refreshOrders]
+  );
+
   const placeOrder = useCallback(async () => {
     if (isProcessing) return;
 
@@ -424,39 +457,124 @@ export default function CheckoutPage() {
     };
 
     setIsProcessing(true);
+    setProcessingLabel("Creating your order…");
     const response = await customerOrderAPI.place(payload);
-    setIsProcessing(false);
 
     if (!response.success || !response.data) {
+      setIsProcessing(false);
       showToast(response.message || "Could not place the order. Please try again.", "warning");
       return;
     }
 
     const order = response.data;
-    setPlacedOrder(order);
-    addOrder(orderFromApi(order));
-    clearCart();
-    clearCheckoutCoupon();
-    setCouponCode(null);
-    launchConfetti();
-    void refreshOrders();
 
     if (order.unavailable && order.unavailable.length > 0) {
       showToast(`Skipped unavailable products: ${order.unavailable.join(", ")}`, "warning");
     }
+
+    // ── Cash on delivery: nothing to collect, the order is already placed ──
+    if (paymentMethod === "cod") {
+      setIsProcessing(false);
+      finishOrder(order);
+      return;
+    }
+
+    // ── Everything else goes through Razorpay ─────────────────────────────
+    setProcessingLabel("Opening secure payment…");
+
+    const sessionResponse = await customerPaymentAPI.createRazorpayOrder(order.id);
+    if (!sessionResponse.success || !sessionResponse.data) {
+      setIsProcessing(false);
+      showToast(
+        sessionResponse.message || "Could not start the payment. Your order is saved as unpaid.",
+        "warning"
+      );
+      return;
+    }
+
+    const session = sessionResponse.data;
+    const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded) {
+      setIsProcessing(false);
+      showToast("Could not reach the payment gateway. Check your connection and retry.", "warning");
+      return;
+    }
+
+    const outcome = await openRazorpayCheckout({
+      keyId: session.keyId,
+      razorpayOrderId: session.razorpayOrderId,
+      amount: session.amount,
+      currency: session.currency,
+      orderNumber: session.orderNumber,
+      customerName: `${profile.firstName} ${profile.lastName}`.trim(),
+      customerEmail: profile.email,
+      customerPhone: selectedAddress?.phone || profile.phone,
+    });
+
+    if (outcome.status === "dismissed") {
+      setIsProcessing(false);
+      void customerPaymentAPI.reportRazorpayFailure({
+        orderId: order.id,
+        reason: "Customer closed the payment window",
+      });
+      void refreshOrders();
+      showToast(`Payment cancelled. Order ${session.orderNumber} is saved — you can pay from My Orders.`, "warning");
+      return;
+    }
+
+    if (outcome.status === "failed") {
+      setIsProcessing(false);
+      void customerPaymentAPI.reportRazorpayFailure({
+        orderId: order.id,
+        reason: outcome.error?.description || "Payment failed",
+        razorpay_payment_id: outcome.error?.metadata?.payment_id,
+      });
+      void refreshOrders();
+      showToast(outcome.error?.description || "Payment failed. Please try another method.", "warning");
+      return;
+    }
+
+    setProcessingLabel("Confirming your payment…");
+    const verification = await customerPaymentAPI.verifyRazorpayPayment({
+      orderId: order.id,
+      razorpay_order_id: outcome.payload.razorpay_order_id,
+      razorpay_payment_id: outcome.payload.razorpay_payment_id,
+      razorpay_signature: outcome.payload.razorpay_signature,
+    });
+    setIsProcessing(false);
+
+    if (!verification.success) {
+      void refreshOrders();
+      showToast(
+        verification.message ||
+          "We could not confirm the payment. If money was debited, it will be refunded automatically.",
+        "warning"
+      );
+      return;
+    }
+
+    finishOrder({
+      ...order,
+      status: "processing",
+      statusLabel: "Order Placed",
+      paymentStatus: "paid",
+      providerPaymentId: verification.data?.paymentId ?? null,
+    });
   }, [
-    addOrder,
     addressError,
-    clearCart,
     couponCode,
     deliveryType,
+    finishOrder,
     goStep,
     isProcessing,
-    launchConfetti,
     orderLines,
     paymentDetail,
     paymentError,
     paymentMethod,
+    profile.email,
+    profile.firstName,
+    profile.lastName,
+    profile.phone,
     refreshOrders,
     selectedAddress,
     showToast,
@@ -504,7 +622,7 @@ export default function CheckoutPage() {
         </div>
       </div>
 
-      <main style={{ background: "#f8fafc", minHeight: "60vh" }}>
+      <main style={{ background: "var(--bg)", minHeight: "60vh" }}>
         {!hydrated || authState === "checking" || (authState === "guest" && !placedOrder) ? (
           <div className="co-loading">
             <i className="fas fa-spinner fa-spin" />
@@ -684,11 +802,11 @@ export default function CheckoutPage() {
                                     value={type}
                                     checked={form.addrType === type}
                                     onChange={() => setForm({ ...form, addrType: type })}
-                                    style={{ accentColor: "#dc2626" }}
+                                    style={{ accentColor: "var(--brand)" }}
                                   />
                                   <i
                                     className={`fas ${type === "home" ? "fa-house" : type === "work" ? "fa-building" : "fa-location-dot"}`}
-                                    style={{ color: type === "home" ? "#dc2626" : type === "work" ? "#3b82f6" : "#64748b" }}
+                                    style={{ color: type === "home" ? "var(--brand)" : type === "work" ? "var(--info)" : "var(--text-secondary)" }}
                                   />
                                   {type.charAt(0).toUpperCase() + type.slice(1)}
                                 </label>
@@ -759,10 +877,10 @@ export default function CheckoutPage() {
                     <button className="co-card-edit" type="button" onClick={() => goStep(1)}><i className="fas fa-pen" /> Change</button>
                   </div>
                   <div className="co-card-body" style={{ padding: "14px 22px" }}>
-                    <div style={{ fontSize: "0.85rem", color: "#0f172a" }}>
+                    <div style={{ fontSize: "0.85rem", color: "var(--ink)" }}>
                       <strong>{selectedAddress?.name}</strong> · {selectedAddress?.phone}
                     </div>
-                    <div style={{ fontSize: "0.82rem", color: "#64748b", marginTop: 4 }}>
+                    <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: 4 }}>
                       {formatAddressLines(selectedAddress).join(", ")}
                     </div>
                     <div className="co-delivery-note">
@@ -791,6 +909,20 @@ export default function CheckoutPage() {
                         </button>
                       ))}
                     </div>
+
+                    {paymentConfig && !paymentConfig.enabled && paymentMethod !== "cod" && (
+                      <div className="co-inline-error" style={{ marginTop: 0, marginBottom: 18 }}>
+                        <i className="fas fa-circle-exclamation" />
+                        Online payment isn&apos;t switched on yet. Pick <strong>COD</strong> to place this order.
+                      </div>
+                    )}
+
+                    {paymentConfig?.enabled && paymentConfig.mode === "test" && paymentMethod !== "cod" && (
+                      <div className="co-test-mode">
+                        <i className="fas fa-flask" />
+                        Test mode — use Razorpay test credentials. No real money is charged.
+                      </div>
+                    )}
 
                     {/* UPI */}
                     <div className={`pay-panel${paymentMethod === "upi" ? " active" : ""}`}>
@@ -1011,10 +1143,10 @@ export default function CheckoutPage() {
                     <button className="co-card-edit" type="button" onClick={() => goStep(1)}><i className="fas fa-pen" /> Change</button>
                   </div>
                   <div className="co-card-body" style={{ padding: "14px 22px" }}>
-                    <div style={{ fontSize: "0.85rem", color: "#0f172a" }}>
+                    <div style={{ fontSize: "0.85rem", color: "var(--ink)" }}>
                       <strong>{selectedAddress?.name}</strong> · {selectedAddress?.phone}
                     </div>
-                    <div style={{ fontSize: "0.82rem", color: "#64748b", marginTop: 4 }}>
+                    <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: 4 }}>
                       {formatAddressLines(selectedAddress).join(", ")}
                     </div>
                     <div className="co-delivery-note">
@@ -1071,7 +1203,7 @@ export default function CheckoutPage() {
                               />
                             </div>
                             <div className="ri-body">
-                              <div className="ri-brand">{item.brandName || "Motabhai"}</div>
+                              <div className="ri-brand">{item.brandName || "AppleNext"}</div>
                               <div className="ri-name">{item.itemName}</div>
                               <div className="ri-meta">
                                 Qty: {qty}
@@ -1103,8 +1235,8 @@ export default function CheckoutPage() {
                   <button className="btn-back" type="button" onClick={() => goStep(2)}><i className="fas fa-arrow-left" /> Back</button>
                   <button className="btn-next" type="button" onClick={placeOrder} disabled={isProcessing}>
                     {isProcessing
-                      ? <><i className="fas fa-spinner fa-spin" /> Processing…</>
-                      : <><i className="fas fa-lock" /> Place Order Securely</>}
+                      ? <><i className="fas fa-spinner fa-spin" /> {processingLabel}</>
+                      : <><i className="fas fa-lock" /> {paymentMethod === "cod" ? "Place Order" : `Pay Rs ${formatRupees(totals.total)}`}</>}
                   </button>
                 </div>
               </div>
@@ -1174,7 +1306,7 @@ export default function CheckoutPage() {
                 )}
                 <div className="co-price-row">
                   <span className="cpr-label">Delivery</span>
-                  <span className="cpr-val" style={{ color: totals.deliveryCharge === 0 ? "#16a34a" : "#0f172a" }}>
+                  <span className="cpr-val" style={{ color: totals.deliveryCharge === 0 ? "var(--success)" : "var(--ink)" }}>
                     {totals.deliveryCharge === 0 ? "FREE" : `Rs ${formatRupees(totals.deliveryCharge)}`}
                   </span>
                 </div>
@@ -1213,9 +1345,9 @@ export default function CheckoutPage() {
                 disabled={isProcessing || orderLines.length === 0}
               >
                 {isProcessing
-                  ? <><i className="fas fa-spinner fa-spin" /> Processing…</>
+                  ? <><i className="fas fa-spinner fa-spin" /> {processingLabel}</>
                   : currentStep === 3
-                    ? <><i className="fas fa-lock" /> Place Order · Rs {formatRupees(totals.total)}</>
+                    ? <><i className="fas fa-lock" /> {paymentMethod === "cod" ? "Place Order" : "Pay"} · Rs {formatRupees(totals.total)}</>
                     : <><i className="fas fa-arrow-right" /> {currentStep === 1 ? "Continue to Payment" : "Review Order"}</>}
               </button>
 
@@ -1264,7 +1396,7 @@ export default function CheckoutPage() {
       {/* Mini footer */}
       <div className="co-footer">
         <div className="co-footer-links">
-          <Link href="/">© 2026 Motabhai Electronics</Link>
+          <Link href="/">© 2026 AppleNext Electronics</Link>
           <Link href="/faq">Privacy Policy</Link>
           <Link href="/faq">Terms &amp; Conditions</Link>
           <Link href="/faq">Contact Support</Link>

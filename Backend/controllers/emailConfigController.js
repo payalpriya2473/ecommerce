@@ -118,7 +118,7 @@ export const saveEmailConfig = async (req, res) => {
         smtpSecure || "tls",
         userToSave,
         passwordToSave,
-        fromName || "Motabhai Enterprise Suite",
+        fromName || "AppleNext Enterprise Suite",
         fromEmail || "",
         isActive ? 1 : 0,
       ],
@@ -140,7 +140,7 @@ function buildProfessionalTestEmail(cfg) {
     <div style="margin:0;background:#f6f7fb;padding:32px 16px;font-family:Arial,sans-serif;color:#1f2937;">
       <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(15,23,42,.08);">
         <div style="background:linear-gradient(135deg,#e11d48,#dc2626);padding:24px 28px;color:#fff;">
-          <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.9;">Motabhai Enterprise Suite</div>
+          <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.9;">AppleNext Enterprise Suite</div>
           <div style="font-size:28px;font-weight:700;line-height:1.2;margin-top:8px;">SMTP Test Email</div>
           <div style="font-size:14px;opacity:.95;margin-top:8px;">Your outgoing mail configuration has been verified successfully.</div>
         </div>
@@ -148,7 +148,7 @@ function buildProfessionalTestEmail(cfg) {
         <div style="padding:28px;">
           <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#111827;">Hello,</p>
           <p style="margin:0 0 20px;font-size:16px;line-height:1.7;color:#374151;">
-            This is a professional test message from the Motabhai Enterprise Suite email system. If you are receiving this email, your SMTP settings are working correctly.
+            This is a professional test message from the AppleNext Enterprise Suite email system. If you are receiving this email, your SMTP settings are working correctly.
           </p>
 
           <div style="margin:24px 0;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
@@ -174,7 +174,7 @@ function buildProfessionalTestEmail(cfg) {
         </div>
 
         <div style="padding:18px 28px 28px;color:#9ca3af;font-size:12px;border-top:1px solid #e5e7eb;">
-          Sent by Motabhai Enterprise Suite SMTP settings
+          Sent by AppleNext Enterprise Suite SMTP settings
         </div>
       </div>
     </div>
@@ -203,7 +203,7 @@ export const testEmailConfig = async (req, res) => {
     await transporter.sendMail({
       from: `"${cfg.from_name}" <${cfg.from_email || cfg.smtp_user}>`,
       to: toEmail,
-      subject: "Motabhai Enterprise Suite | SMTP Test Email",
+      subject: "AppleNext Enterprise Suite | SMTP Test Email",
       html: buildProfessionalTestEmail(cfg),
     });
 

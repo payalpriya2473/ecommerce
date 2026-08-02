@@ -629,7 +629,7 @@ router.post("/forgot-password/send-email", async (req, res) => {
     console.log(`[ForgotPwd Email] ${email} → ${resetUrl}`);
 
     // TODO: Integrate your email provider (nodemailer / SendGrid / AWS SES) here
-    // Example: await sendEmail({ to: email, subject: "Reset your Motabhai password", html: `...` });
+    // Example: await sendEmail({ to: email, subject: "Reset your AppleNext password", html: `...` });
 
     const isDev = process.env.NODE_ENV === "dev" || process.env.NODE_ENV === "development";
     return ok(res, { sent: true, ...(isDev ? { resetUrl } : {}) }, "Reset link sent to your email");

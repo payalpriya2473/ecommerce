@@ -7,11 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AuthGuard } from "@/components/auth-guard"
 import { AuthenticatedLayout } from "@/components/authenticated-layout"
 import { Tag, ArrowLeft } from "lucide-react"
-import { itemAPI, offerAPI } from "@/lib/api"
+import { itemAPI, offerAPI, brandAPI } from "@/lib/api"
 import {
-  OfferFormFields, EMPTY_OFFER_FORM, buildOfferPayload,
+  OfferFormFields, EMPTY_OFFER_FORM, buildOfferPayload, offersListRouteForSection,
   type OfferFormValues, type OfferItemLite,
 } from "@/app/inventory-masters/offers/OfferForm"
+import type { BrandOption } from "@/components/masters/searchable-brand-select"
 
 function toItemLite(raw: any): OfferItemLite {
   const v = raw?.variants?.[0]
@@ -25,7 +26,15 @@ function toItemLite(raw: any): OfferItemLite {
   }
 }
 
-const VALID_SECTIONS = ["flash_sale", "home_best", "bank_offer", "brand_deal", "coupon", "combo", "clearance"]
+function toBrandOption(raw: any): BrandOption {
+  return {
+    id: String(raw?.id ?? ""),
+    name: raw?.name ?? "",
+    iconUrl: raw?.iconUrl ?? null,
+  }
+}
+
+const VALID_SECTIONS = ["flash_sale", "home_best", "bank_offer", "brand_deal", "coupon", "combo", "clearance", "exchange_offer"]
 
 export default function OfferRegisterPage() {
   const router = useRouter()
@@ -36,6 +45,7 @@ export default function OfferRegisterPage() {
     section: (VALID_SECTIONS.includes(presetSection) ? presetSection : EMPTY_OFFER_FORM.section) as OfferFormValues["section"],
   })
   const [items, setItems] = useState<OfferItemLite[]>([])
+  const [brands, setBrands] = useState<BrandOption[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
 
@@ -43,9 +53,15 @@ export default function OfferRegisterPage() {
     const load = async () => {
       const token = sessionStorage.getItem("authToken")
       if (!token) return
-      const res = await itemAPI.getAllLite(token)
-      if (res.success && Array.isArray(res.data)) {
-        setItems(res.data.map(toItemLite).filter((i: OfferItemLite) => i.id))
+      const [itemsRes, brandsRes] = await Promise.all([
+        itemAPI.getAllLite(token),
+        brandAPI.getAll(token),
+      ])
+      if (itemsRes.success && Array.isArray(itemsRes.data)) {
+        setItems(itemsRes.data.map(toItemLite).filter((i: OfferItemLite) => i.id))
+      }
+      if (brandsRes.success && Array.isArray(brandsRes.data)) {
+        setBrands(brandsRes.data.map(toBrandOption).filter((b: BrandOption) => b.id))
       }
     }
     load()
@@ -64,16 +80,21 @@ export default function OfferRegisterPage() {
       if (!values.couponCode.trim()) { setError("Please enter a coupon code"); return }
       if (!values.couponTitle.trim()) { setError("Please enter a coupon title"); return }
     } else if (values.section === "brand_deal") {
-      if (!values.brandDealName.trim()) { setError("Please enter a brand name"); return }
-    } else if (!values.itemId) {
-      setError("Please select a product from Item Master"); return
+      if (!values.brandId) { setError("Please select a brand"); return }
+    } else if (values.section === "exchange_offer") {
+      if (!values.exchangeTitle.trim()) { setError("Please enter an exchange offer title"); return }
+    } else {
+      if (!values.itemId) { setError("Please select a product from Item Master"); return }
+      if (!values.discountValue && !values.offerPrice) {
+        setError("Please enter a discount value or an offer price"); return
+      }
     }
     setIsSubmitting(true)
     try {
       const token = sessionStorage.getItem("authToken")
       if (!token) { setError("Not authenticated"); return }
       const res = await offerAPI.register(buildOfferPayload(values) as any, token)
-      if (res.success) router.push("/inventory-masters/offers")
+      if (res.success) router.push(offersListRouteForSection(values.section))
       else setError(res.message || "Failed to create offer")
     } catch {
       setError("Failed to create offer. Please try again.")
@@ -87,7 +108,7 @@ export default function OfferRegisterPage() {
       <AuthenticatedLayout>
         <div className="py-8 px-4">
           <div className="w-full">
-            <Button variant="ghost" onClick={() => router.push("/inventory-masters/offers")}
+            <Button variant="ghost" onClick={() => router.push(offersListRouteForSection(values.section))}
               className="mb-4 bg-red-700 text-white hover:bg-red-800">
               <ArrowLeft className="h-4 w-4 mr-2" /> Back
             </Button>
@@ -99,7 +120,7 @@ export default function OfferRegisterPage() {
                   </div>
                   <div className="flex-1">
                     <CardTitle className="text-2xl">Add Offer</CardTitle>
-                    <CardDescription>Create a website offer from an existing Item Master product</CardDescription>
+                    
                   </div>
                 </div>
               </CardHeader>
@@ -108,11 +129,12 @@ export default function OfferRegisterPage() {
                   values={values}
                   onChange={(patch) => setValues((prev) => ({ ...prev, ...patch }))}
                   onSubmit={handleSubmit}
-                  onCancel={() => router.push("/inventory-masters/offers")}
+                  onCancel={() => router.push(offersListRouteForSection(values.section))}
                   error={error}
                   isSubmitting={isSubmitting}
                   mode="add"
                   items={items}
+                  brands={brands}
                 />
               </CardContent>
             </Card>

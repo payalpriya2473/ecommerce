@@ -28,8 +28,9 @@ import {
   Settings,
   Receipt,
   TrendingUp,
-  Palette, 
-  Mail, 
+  Palette,
+  Mail,
+  Repeat,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -247,6 +248,11 @@ export function AppSidebar({
                   title: "Combo Deals & Clearance",
                   href: "/inventory-masters/offers/combo",
                   icon: Package,
+                },
+                {
+                  title: "Exchange Offers",
+                  href: "/inventory-masters/offers/exchange",
+                  icon: Repeat,
                 },
               ],
             },
@@ -508,8 +514,8 @@ export function AppSidebar({
           <div className="flex items-center gap-2">
             <div className="h-10 w-10 overflow-hidden rounded-lg border bg-white shadow-sm">
               <Image
-                src="/motabhai_log.jpeg"
-                alt="Motabhai"
+                src="/applenext_icon.png"
+                alt="AppleNext"
                 width={40}
                 height={40}
                 className="h-full w-full object-cover"
@@ -518,7 +524,7 @@ export function AppSidebar({
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-sm leading-none enterprise-gradient-text">
-                Motabhai
+                AppleNext
               </span>
               <span className="text-xs text-muted-foreground">
                 Enterprise Suite
@@ -529,8 +535,8 @@ export function AppSidebar({
         {collapsed && (
           <div className="mx-auto h-10 w-10 overflow-hidden rounded-lg border bg-white shadow-sm">
             <Image
-              src="/motabhai_log.jpeg"
-              alt="Motabhai"
+              src="/applenext_icon.png"
+              alt="AppleNext"
               width={40}
               height={40}
               className="h-full w-full object-cover"

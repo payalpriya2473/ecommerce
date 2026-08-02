@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
-  Tag, Plus, Search, Edit, Trash2, AlertCircle, CheckCircle2,
+  Tag, Plus, Search, Edit, Eye, Trash2, AlertCircle, CheckCircle2,
 } from "lucide-react"
 import { AuthGuard } from "@/components/auth-guard"
 import { AuthenticatedLayout } from "@/components/authenticated-layout"
@@ -41,10 +41,13 @@ export interface OffersSubmodule {
   sections: string[]
   /** section the Add button pre-selects */
   addSection: string
+  /** show the "Offer Price" column — default true; set false where it's never applicable */
+  showOfferPrice?: boolean
 }
 
 export function OffersListView({ submodule }: { submodule: OffersSubmodule }) {
   const router = useRouter()
+  const showOfferPrice = submodule.showOfferPrice !== false
   const [offers, setOffers] = useState<Offer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -96,7 +99,12 @@ export function OffersListView({ submodule }: { submodule: OffersSubmodule }) {
         (o.brandName || "").toLowerCase().includes(q) ||
         (o.badge || "").toLowerCase().includes(q) ||
         (o.bankName || "").toLowerCase().includes(q) ||
-        (o.comboTitle || "").toLowerCase().includes(q)
+        (o.comboTitle || "").toLowerCase().includes(q) ||
+        (o.couponCode || "").toLowerCase().includes(q) ||
+        (o.couponTitle || "").toLowerCase().includes(q) ||
+        (o.categoryLabel || "").toLowerCase().includes(q) ||
+        (o.brandDealName || "").toLowerCase().includes(q) ||
+        (o.exchangeTitle || "").toLowerCase().includes(q)
       )
     })
   }, [offers, search, statusFilter, submodule.sections])
@@ -204,9 +212,9 @@ export function OffersListView({ submodule }: { submodule: OffersSubmodule }) {
                       <TableRow className="bg-muted/50 hover:bg-muted/50">
                         <TableHead className="font-semibold">Product</TableHead>
                         <TableHead className="font-semibold">Section</TableHead>
-                        <TableHead className="font-semibold text-right">Discount</TableHead>
-                        <TableHead className="font-semibold text-right">Offer Price</TableHead>
-                        <TableHead className="font-semibold">Schedule</TableHead>
+                        <TableHead className="font-semibold text-left">Discount</TableHead>
+                        {showOfferPrice && <TableHead className="font-semibold text-left">Offer Price</TableHead>}
+                        <TableHead className="font-semibold text-left">Schedule</TableHead>
                         <TableHead className="font-semibold text-center">Status</TableHead>
                         <TableHead className="font-semibold text-center">Actions</TableHead>
                       </TableRow>
@@ -217,6 +225,7 @@ export function OffersListView({ submodule }: { submodule: OffersSubmodule }) {
                         const isCombo = o.section === "combo"
                         const isCoupon = o.section === "coupon"
                         const isBrand = o.section === "brand_deal"
+                        const isExchange = o.section === "exchange_offer"
                         return (
                         <TableRow key={o.id} className="hover:bg-muted/30">
                           <TableCell>
@@ -240,6 +249,11 @@ export function OffersListView({ submodule }: { submodule: OffersSubmodule }) {
                                 <p className="font-medium">{o.brandDealName || "Brand"}</p>
                                 <p className="text-xs text-muted-foreground">{[o.discountLabel, Array.isArray(o.productIds) ? `${o.productIds.length} products` : ""].filter(Boolean).join(" • ")}</p>
                               </>
+                            ) : isExchange ? (
+                              <>
+                                <p className="font-medium">{o.exchangeTitle || "Exchange Offer"}</p>
+                                <p className="text-xs text-muted-foreground">{[o.exchangePartnerName, Array.isArray(o.productIds) ? `${o.productIds.length} products` : ""].filter(Boolean).join(" • ")}</p>
+                              </>
                             ) : (
                               <>
                                 <p className="font-medium">{o.itemName || "—"}{o.variant ? <span className="text-muted-foreground"> · {o.variant}</span> : null}</p>
@@ -250,20 +264,51 @@ export function OffersListView({ submodule }: { submodule: OffersSubmodule }) {
                           <TableCell>
                             <span className="inline-block rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-semibold text-accent">{sectionLabel(o.section)}</span>
                           </TableCell>
-                          <TableCell className="text-right">
-                            {isBank
-                              ? (o.offerText || "—")
-                              : isCombo
-                              ? "Combo"
-                              : isCoupon
-                              ? (o.couponCode || "—")
-                              : isBrand
-                              ? (o.discountLabel || "—")
-                              : o.discountPercent ? `${o.discountPercent}%` : o.discountAmount ? `Rs ${Number(o.discountAmount).toLocaleString("en-IN")}` : "—"}
+                          <TableCell className="text-left">
+                            {(() => {
+                              const discountText = isBank
+                                ? (o.offerText || "")
+                                : isCombo
+                                ? (() => {
+                                    const total = Array.isArray(o.comboItems)
+                                      ? o.comboItems.reduce((s, c) => s + (Number(c.price) || 0), 0)
+                                      : 0
+                                    const combo = Number(o.offerPrice) || 0
+                                    const saving = Math.max(0, total - combo)
+                                    return saving > 0 ? `Save Rs ${saving.toLocaleString("en-IN")}` : "Combo"
+                                  })()
+                                : isCoupon
+                                ? (o.maxOff ? `Rs ${Number(o.maxOff).toLocaleString("en-IN")} off` : (o.couponCode || ""))
+                                : isBrand
+                                ? (o.discountLabel || "")
+                                : isExchange
+                                ? (o.maxOff ? `Up to Rs ${Number(o.maxOff).toLocaleString("en-IN")}` : "")
+                                : o.discountPercent ? `${o.discountPercent}%` : o.discountAmount ? `Rs ${Number(o.discountAmount).toLocaleString("en-IN")}` : ""
+                              return discountText ? (
+                                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 whitespace-nowrap">
+                                  {discountText}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )
+                            })()}
                           </TableCell>
-                          <TableCell className="text-right font-medium">{fmt(o.offerPrice)}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                            {fmtDate(o.startAt)} <span className="opacity-60">→</span> {fmtDate(o.endAt)}
+                          {showOfferPrice && <TableCell className="text-left font-medium">{fmt(o.offerPrice)}</TableCell>}
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {!o.startAt && !o.endAt ? (
+                              <span className="text-muted-foreground">Always active</span>
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-block w-9 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">From</span>
+                                  <span className="font-medium text-foreground">{fmtDate(o.startAt)}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-block w-9 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">To</span>
+                                  <span className="font-medium text-foreground">{fmtDate(o.endAt)}</span>
+                                </div>
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="text-center">
                             <span className={`inline-flex min-w-[78px] items-center justify-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${o.isActive ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
@@ -273,6 +318,10 @@ export function OffersListView({ submodule }: { submodule: OffersSubmodule }) {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-center gap-1">
+                              <Button variant="ghost" size="icon" title="View" className="h-8 w-8 hover:bg-accent/10 hover:text-accent"
+                                onClick={() => router.push(`/inventory-masters/offers/edit?id=${o.id}&mode=view`)}>
+                                <Eye className="h-4 w-4" />
+                              </Button>
                               <Button variant="ghost" size="icon" title="Edit" className="h-8 w-8 hover:bg-blue-50 hover:text-blue-600"
                                 onClick={() => router.push(`/inventory-masters/offers/edit?id=${o.id}`)}>
                                 <Edit className="h-4 w-4" />
@@ -305,7 +354,7 @@ export function OffersListView({ submodule }: { submodule: OffersSubmodule }) {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete this offer?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This removes <strong>{deleteTarget?.section === "bank_offer" ? deleteTarget?.bankName : deleteTarget?.section === "combo" ? deleteTarget?.comboTitle : deleteTarget?.itemName}</strong> from the <strong>{sectionLabel(deleteTarget?.section || "")}</strong> section on the website.
+                    This removes <strong>{deleteTarget?.section === "bank_offer" ? deleteTarget?.bankName : deleteTarget?.section === "combo" ? deleteTarget?.comboTitle : deleteTarget?.section === "exchange_offer" ? deleteTarget?.exchangeTitle : deleteTarget?.itemName}</strong> from the <strong>{sectionLabel(deleteTarget?.section || "")}</strong> section on the website.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

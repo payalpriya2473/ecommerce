@@ -7,11 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AuthGuard } from "@/components/auth-guard"
 import { AuthenticatedLayout } from "@/components/authenticated-layout"
 import { Tag, ArrowLeft } from "lucide-react"
-import { itemAPI, offerAPI, type OfferSection } from "@/lib/api"
+import { itemAPI, offerAPI, brandAPI, type OfferSection } from "@/lib/api"
 import {
-  OfferFormFields, EMPTY_OFFER_FORM, buildOfferPayload,
+  OfferFormFields, EMPTY_OFFER_FORM, buildOfferPayload, offersListRouteForSection,
   type OfferFormValues, type OfferItemLite,
 } from "@/app/inventory-masters/offers/OfferForm"
+import type { BrandOption } from "@/components/masters/searchable-brand-select"
 
 function toItemLite(raw: any): OfferItemLite {
   const v = raw?.variants?.[0]
@@ -22,6 +23,14 @@ function toItemLite(raw: any): OfferItemLite {
     brandName: raw?.brandName ?? "",
     itemGroupName: raw?.itemGroupName ?? "",
     offerPrice: Number(raw?.offerPrice ?? v?.offerPrice ?? 0),
+  }
+}
+
+function toBrandOption(raw: any): BrandOption {
+  return {
+    id: String(raw?.id ?? ""),
+    name: raw?.name ?? "",
+    iconUrl: raw?.iconUrl ?? null,
   }
 }
 
@@ -38,9 +47,11 @@ export default function OfferEditPage() {
   const router = useRouter()
   const params = useSearchParams()
   const id = params.get("id") || ""
+  const isView = params.get("mode") === "view"
 
   const [values, setValues] = useState<OfferFormValues>({ ...EMPTY_OFFER_FORM })
   const [items, setItems] = useState<OfferItemLite[]>([])
+  const [brands, setBrands] = useState<BrandOption[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
@@ -50,12 +61,16 @@ export default function OfferEditPage() {
       const token = sessionStorage.getItem("authToken")
       if (!token || !id) return
       try {
-        const [itemsRes, offerRes] = await Promise.all([
+        const [itemsRes, brandsRes, offerRes] = await Promise.all([
           itemAPI.getAllLite(token),
+          brandAPI.getAll(token),
           offerAPI.getById(token, id),
         ])
         if (itemsRes.success && Array.isArray(itemsRes.data)) {
           setItems(itemsRes.data.map(toItemLite).filter((i: OfferItemLite) => i.id))
+        }
+        if (brandsRes.success && Array.isArray(brandsRes.data)) {
+          setBrands(brandsRes.data.map(toBrandOption).filter((b: BrandOption) => b.id))
         }
         if (offerRes.success && offerRes.data) {
           const o = offerRes.data
@@ -99,10 +114,15 @@ export default function OfferEditPage() {
             minOrder: o.minOrder != null ? String(o.minOrder) : "",
             maxOff: o.maxOff != null ? String(o.maxOff) : "",
             validTill: o.validTill ? String(o.validTill).slice(0, 10) : "",
+            brandId: o.brandId != null ? String(o.brandId) : "",
             brandDealName: o.brandDealName ?? "",
             discountLabel: o.discountLabel ?? "",
+            exchangeTitle: o.exchangeTitle ?? "",
+            exchangePartnerName: o.exchangePartnerName ?? "",
+            ctaText: o.ctaText ?? "",
             description: o.description ?? "",
             colorTheme: o.colorTheme ?? "blue",
+            tags: o.tags ?? "",
           })
         } else {
           setError(offerRes.message || "Offer not found")
@@ -115,6 +135,7 @@ export default function OfferEditPage() {
   }, [id])
 
   const handleSubmit = async () => {
+    if (isView) return
     setError("")
     if (values.section === "bank_offer") {
       if (!values.banks?.[0]?.bankName.trim()) { setError("Please enter the bank / card name"); return }
@@ -126,16 +147,21 @@ export default function OfferEditPage() {
       if (!values.couponCode.trim()) { setError("Please enter a coupon code"); return }
       if (!values.couponTitle.trim()) { setError("Please enter a coupon title"); return }
     } else if (values.section === "brand_deal") {
-      if (!values.brandDealName.trim()) { setError("Please enter a brand name"); return }
-    } else if (!values.itemId) {
-      setError("Please select a product from Item Master"); return
+      if (!values.brandId) { setError("Please select a brand"); return }
+    } else if (values.section === "exchange_offer") {
+      if (!values.exchangeTitle.trim()) { setError("Please enter an exchange offer title"); return }
+    } else {
+      if (!values.itemId) { setError("Please select a product from Item Master"); return }
+      if (!values.discountValue && !values.offerPrice) {
+        setError("Please enter a discount value or an offer price"); return
+      }
     }
     setIsSubmitting(true)
     try {
       const token = sessionStorage.getItem("authToken")
       if (!token) { setError("Not authenticated"); return }
       const res = await offerAPI.update(id, buildOfferPayload(values, "edit") as any, token)
-      if (res.success) router.push("/inventory-masters/offers")
+      if (res.success) router.push(offersListRouteForSection(values.section))
       else setError(res.message || "Failed to update offer")
     } catch {
       setError("Failed to update offer. Please try again.")
@@ -149,7 +175,7 @@ export default function OfferEditPage() {
       <AuthenticatedLayout>
         <div className="py-8 px-4">
           <div className="w-full">
-            <Button variant="ghost" onClick={() => router.push("/inventory-masters/offers")}
+            <Button variant="ghost" onClick={() => router.push(offersListRouteForSection(values.section))}
               className="mb-4 bg-red-700 text-white hover:bg-red-800">
               <ArrowLeft className="h-4 w-4 mr-2" /> Back
             </Button>
@@ -160,8 +186,10 @@ export default function OfferEditPage() {
                     <Tag className="h-6 w-6 text-white" />
                   </div>
                   <div className="flex-1">
-                    <CardTitle className="text-2xl">Edit Offer</CardTitle>
-                    <CardDescription>Update discount, schedule, and display settings</CardDescription>
+                    <CardTitle className="text-2xl">{isView ? "View Offer" : "Edit Offer"}</CardTitle>
+                    <CardDescription>
+                      {isView ? "Read-only view of this offer's details" : "Update discount, schedule, and display settings"}
+                    </CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -173,11 +201,12 @@ export default function OfferEditPage() {
                     values={values}
                     onChange={(patch) => setValues((prev) => ({ ...prev, ...patch }))}
                     onSubmit={handleSubmit}
-                    onCancel={() => router.push("/inventory-masters/offers")}
+                    onCancel={() => router.push(offersListRouteForSection(values.section))}
                     error={error}
                     isSubmitting={isSubmitting}
-                    mode="edit"
+                    mode={isView ? "view" : "edit"}
                     items={items}
+                    brands={brands}
                   />
                 )}
               </CardContent>

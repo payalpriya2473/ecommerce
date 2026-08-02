@@ -76,6 +76,7 @@ export interface AccountOrder {
   paymentLabel?: string;
   deliveryLabel?: string;
   address?: string;
+  awaitingPayment?: boolean;
 }
 
 export interface AccountSettings {
@@ -250,15 +251,20 @@ function formatOrderDate(value?: string | null): string {
 
 export function orderFromApi(order: CustomerOrder): AccountOrder {
   const paymentLabel = PAYMENT_LABELS[order.paymentMethod] ?? order.paymentMethod;
+  // The account UI only knows five states; unpaid orders ride along as
+  // "processing" with an explicit label so nothing renders blank.
+  const awaitingPayment = order.status === "pending_payment" || order.status === "payment_failed";
+  const uiStatus = awaitingPayment ? "processing" : order.status;
 
   return {
     id: order.orderNumber || String(order.id),
     orderId: String(order.id),
     date: formatOrderDate(order.placedAt),
-    status: order.status,
+    status: uiStatus as AccountOrder["status"],
     statusLabel: order.statusLabel || "Order Placed",
+    awaitingPayment,
     total: Number(order.totalAmount) || 0,
-    canTrack: order.status === "processing" || order.status === "shipped",
+    canTrack: !awaitingPayment && (order.status === "processing" || order.status === "shipped"),
     canReturn: order.status === "delivered",
     paymentLabel: order.paymentDetail ? `${paymentLabel} · ${order.paymentDetail}` : paymentLabel,
     deliveryLabel: order.deliveryLabel ?? undefined,

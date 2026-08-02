@@ -80,7 +80,7 @@ const digitsOnly = (value: string) => value.replace(/\D/g, "")
 
 const buildMailToLink = (order: PurchaseOrder) => {
   if (!order.supplierEmail) return ""
-  const subject = `Purchase Order ${order.poNumber} - Motabhai Enterprise Suite`
+  const subject = `Purchase Order ${order.poNumber} - AppleNext Enterprise Suite`
   const body = [
     `Hello ${order.supplierName || ""},`,
     "",
@@ -89,7 +89,7 @@ const buildMailToLink = (order: PurchaseOrder) => {
     `Amount: ₹ ${(order.netAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     "",
     "Regards,",
-    "Motabhai Enterprise Suite",
+    "AppleNext Enterprise Suite",
   ].join("\n")
   return `mailto:${order.supplierEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }
@@ -106,7 +106,7 @@ const buildWhatsAppLink = (order: PurchaseOrder) => {
     `Amount: ₹ ${(order.netAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     "",
     "Regards,",
-    "Motabhai Enterprise Suite",
+    "AppleNext Enterprise Suite",
   ].join("\n")
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
 }

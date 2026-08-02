@@ -1,5 +1,5 @@
 /**
- * Session Manager for Motabhai Enterprise Suite
+ * Session Manager for AppleNext Enterprise Suite
  *
  * Behaviour:
  * - Session lasts the full 24 hours of the JWT lifetime

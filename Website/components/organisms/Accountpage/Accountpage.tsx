@@ -63,12 +63,12 @@ function formatMemberSince(value: string) {
 
 function initials(firstName: string, lastName: string, email: string) {
   const base = `${firstName} ${lastName}`.trim() || email.trim();
-  if (!base) return "M";
+  if (!base) return "A";
   return base
     .split(/\s+/)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "M";
+    .join("") || "A";
 }
 
 function createEmptyAddress(profileName: string, profilePhone: string): AddressFormState {
@@ -291,7 +291,7 @@ export default function AccountPage() {
     resetAddressForm();
   }
 
-  const profileName = `${profile.firstName} ${profile.lastName}`.trim() || "Motabhai Customer";
+  const profileName = `${profile.firstName} ${profile.lastName}`.trim() || "AppleNext Customer";
   const profileEmail = profile.email || "Add your email in profile settings";
   const profilePhone = profile.phone || "Add your phone number";
   const currentPanelLabel = panel === "wishlist" ? "Wishlist" : panel === "addresses" ? "Saved Addresses" : panel === "orders" ? "My Orders" : panel === "wallet" ? "Wallet & Rewards" : panel === "profile" ? "Edit Profile" : panel === "settings" ? "Settings" : "My Account";
@@ -378,7 +378,7 @@ export default function AccountPage() {
 
           <div className="acc-points-card">
             <div className="acc-points-header">
-              <h4><i className="fas fa-star" /> MB Rewards Points</h4>
+              <h4><i className="fas fa-star" /> AppleNext Reward Points</h4>
               <button className="acc-points-link" onClick={() => switchPanel("wallet")}>View Wallet</button>
             </div>
             <div className="acc-points-val">{rewardsPoints.toLocaleString("en-IN")}</div>
@@ -425,10 +425,10 @@ export default function AccountPage() {
             <div className="acc-panel">
               <div className="acc-overview-stats">
                 {[
-                  { num: String(orders.length), label: "Total Orders", icon: "fas fa-bag-shopping", bg: "#fef2f2", color: "#dc2626", onClick: () => switchPanel("orders") },
+                  { num: String(orders.length), label: "Total Orders", icon: "fas fa-bag-shopping", bg: "var(--brand-tint)", color: "var(--brand)", onClick: () => switchPanel("orders") },
                   { num: String(wishlistCount), label: "Wishlist Items", icon: "fas fa-heart", bg: "#fdf4ff", color: "#a855f7", href: "/wishlist" },
-                  { num: fp(totalSpent), label: "Total Spent", icon: "fas fa-indian-rupee-sign", bg: "#f0fdf4", color: "#16a34a", onClick: () => switchPanel("wallet") },
-                  { num: String(cartItems.length), label: "Cart Items", icon: "fas fa-shopping-cart", bg: "#eff6ff", color: "#2563eb", href: "/cart" },
+                  { num: fp(totalSpent), label: "Total Spent", icon: "fas fa-indian-rupee-sign", bg: "var(--success-tint)", color: "var(--success)", onClick: () => switchPanel("wallet") },
+                  { num: String(cartItems.length), label: "Cart Items", icon: "fas fa-shopping-cart", bg: "var(--info-tint)", color: "var(--info)", href: "/cart" },
                 ].map((stat, index) => {
                   const content = (
                     <>
@@ -491,9 +491,9 @@ export default function AccountPage() {
                 <div className="acc-sec-head"><h2><i className="fas fa-clock-rotate-left" /> Recent Activity</h2></div>
                 <div className="acc-sec-body acc-activity-list">
                   {[
-                    wishlistCount > 0 ? { icon: "fas fa-heart", bg: "#fee2e2", ic: "#dc2626", title: `${wishlistCount} item${wishlistCount === 1 ? "" : "s"} in wishlist`, sub: "Live wishlist synced with the wishlist page", time: "Now" } : null,
-                    totalQuantity > 0 ? { icon: "fas fa-cart-shopping", bg: "#dbeafe", ic: "#2563eb", title: `${totalQuantity} item${totalQuantity === 1 ? "" : "s"} in cart`, sub: "Cart is synced across the site", time: "Now" } : null,
-                    addresses.length > 0 ? { icon: "fas fa-location-dot", bg: "#dcfce7", ic: "#16a34a", title: `${addresses.length} saved address${addresses.length === 1 ? "" : "es"}`, sub: "Default delivery address available for checkout", time: "Saved" } : null,
+                    wishlistCount > 0 ? { icon: "fas fa-heart", bg: "var(--brand-tint)", ic: "var(--brand)", title: `${wishlistCount} item${wishlistCount === 1 ? "" : "s"} in wishlist`, sub: "Live wishlist synced with the wishlist page", time: "Now" } : null,
+                    totalQuantity > 0 ? { icon: "fas fa-cart-shopping", bg: "var(--info-tint)", ic: "var(--info)", title: `${totalQuantity} item${totalQuantity === 1 ? "" : "s"} in cart`, sub: "Cart is synced across the site", time: "Now" } : null,
+                    addresses.length > 0 ? { icon: "fas fa-location-dot", bg: "var(--success-tint)", ic: "var(--success)", title: `${addresses.length} saved address${addresses.length === 1 ? "" : "es"}`, sub: "Default delivery address available for checkout", time: "Saved" } : null,
                   ].filter(Boolean).map((activity, index) => (
                     <div key={index} className="acc-activity-item">
                       <div className="acc-activity-icon" style={{ background: activity!.bg, color: activity!.ic }}><i className={activity!.icon} /></div>
@@ -684,7 +684,7 @@ export default function AccountPage() {
                     <div>
                       <div className="acc-wallet-bal-label">Available Balance</div>
                       <div className="acc-wallet-bal-val">{fp(walletBalance)}</div>
-                      <div className="acc-wallet-bal-sub">{rewardsPoints.toLocaleString("en-IN")} MB Points · Based on real orders</div>
+                      <div className="acc-wallet-bal-sub">{rewardsPoints.toLocaleString("en-IN")} AppleNext Points · Based on real orders</div>
                     </div>
                     <div className="acc-wallet-actions">
                       <button className="acc-wallet-btn add" onClick={() => showToast('<i class="fas fa-plus"></i> Wallet top-up needs payment gateway integration', "info")}><i className="fas fa-plus" /> Add Money</button>
@@ -798,8 +798,8 @@ export default function AccountPage() {
                       <button className="acc-action-btn acc-btn-invoice" onClick={() => showToast('<i class="fas fa-download"></i> Data export is ready for backend integration', "info")}><i className="fas fa-download" /> Request</button>
                     </div>
                     <div className="acc-setting-row">
-                      <div className="acc-setting-left"><div className="acc-setting-title" style={{ color: "#ef4444" }}>Delete Account</div><div className="acc-setting-sub">Permanently remove your account and stored data</div></div>
-                      <button className="acc-action-btn" style={{ border: "1.5px solid #ef4444", color: "#ef4444" }} onClick={() => showToast('<i class="fas fa-triangle-exclamation"></i> Contact support to delete your account', "warning")}><i className="fas fa-trash" /> Delete</button>
+                      <div className="acc-setting-left"><div className="acc-setting-title" style={{ color: "var(--brand-light)" }}>Delete Account</div><div className="acc-setting-sub">Permanently remove your account and stored data</div></div>
+                      <button className="acc-action-btn" style={{ border: "1.5px solid var(--brand-light)", color: "var(--brand-light)" }} onClick={() => showToast('<i class="fas fa-triangle-exclamation"></i> Contact support to delete your account', "warning")}><i className="fas fa-trash" /> Delete</button>
                     </div>
                   </div>
                 </div>
@@ -813,7 +813,7 @@ export default function AccountPage() {
                 <div className="acc-sec-head"><h2><i className="fas fa-heart" /> Wishlist</h2><span className="acc-sec-meta">{wishlistCount} live items</span></div>
                 <div className="acc-sec-body">
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                    <div style={{ color: "#64748b", fontSize: ".88rem" }}>
+                    <div style={{ color: "var(--text-secondary)", fontSize: ".88rem" }}>
                       This view stays inside your account UI while using the same live wishlist data.
                     </div>
                     <Link href="/wishlist" className="acc-ghost-btn"><i className="fas fa-arrow-up-right-from-square" /> Open Standalone Wishlist</Link>
@@ -828,7 +828,7 @@ export default function AccountPage() {
                             <div className="acc-wish-badge">{item.originalPrice > item.offerPrice ? `${Math.round(((item.originalPrice - item.offerPrice) / item.originalPrice) * 100)}% Off` : "Saved"}</div>
                           </div>
                           <div className="acc-wish-body">
-                            <div className="acc-wish-brand">{item.brandName || "Motabhai"}</div>
+                            <div className="acc-wish-brand">{item.brandName || "AppleNext"}</div>
                             <div className="acc-wish-name">{item.itemName}</div>
                             <div className="acc-wish-price">{fp(item.offerPrice)} {item.originalPrice > item.offerPrice ? <span className="acc-wish-orig">{fp(item.originalPrice)}</span> : null}</div>
                             <div className="acc-wish-saving">{item.categoryName || item.variant || "Saved in wishlist"}</div>
@@ -855,7 +855,7 @@ export default function AccountPage() {
           <div className="acc-track-modal">
             <div className="acc-track-head">
               <div>
-                <h3>Track Order <span style={{ color: "#dc2626" }}>{activeOrder.id}</span></h3>
+                <h3>Track Order <span style={{ color: "var(--brand)" }}>{activeOrder.id}</span></h3>
                 <p>Placed on {activeOrder.date} · {activeOrder.items.length} items</p>
               </div>
               <button className="acc-track-close" onClick={() => setShowTrackId(null)}><i className="fas fa-xmark" /></button>
@@ -904,7 +904,7 @@ export default function AccountPage() {
       <footer className="acc-footer">
         <div className="acc-footer-inner">
           <div className="acc-fb-brand">
-            <div className="acc-fb-logo">MOTABHAI</div>
+            <div className="acc-fb-logo">APPLENEXT</div>
             <p>Your one-stop destination for the latest electronics, mobile phones, laptops, and home appliances at the best prices with genuine warranty.</p>
           </div>
           {[
@@ -919,7 +919,7 @@ export default function AccountPage() {
           ))}
         </div>
         <div className="acc-footer-bottom">
-          <p>&copy; 2026 Motabhai Electronics. All rights reserved.</p>
+          <p>&copy; 2026 AppleNext Electronics. All rights reserved.</p>
           <div className="acc-pay-tags"><span>Visa</span><span>Mastercard</span><span>UPI</span><span>Net Banking</span><span>EMI</span></div>
         </div>
       </footer>

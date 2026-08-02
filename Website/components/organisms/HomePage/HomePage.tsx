@@ -481,12 +481,12 @@ export default function HomePage() {
                 <div key={i} className="cat-card" style={{ opacity: 0.4 }}>
                   <div
                     className="cat-icon ci-blue"
-                    style={{ background: "#f1f5f9" }}
+                    style={{ background: "var(--bg-subtle)" }}
                   />
                   <div
                     style={{
                       height: 12,
-                      background: "#f1f5f9",
+                      background: "var(--bg-subtle)",
                       borderRadius: 4,
                       width: 80,
                       margin: "0 auto",
@@ -778,7 +778,7 @@ export default function HomePage() {
                 <div key={i} className="brand-card" style={{ opacity: 0.4 }}>
                   <div
                     className="brand-logo"
-                    style={{ background: "#f1f5f9" }}
+                    style={{ background: "var(--bg-subtle)" }}
                   />
                 </div>
               ))}
@@ -833,7 +833,7 @@ export default function HomePage() {
       <footer className="footer">
         <div className="footer-top">
           <div>
-            <div className="footer-logo">MOTABHAI</div>
+            <div className="footer-logo">APPLENEXT</div>
             <p className="footer-desc">
               Your one-stop destination for the latest electronics, mobile
               phones, laptops, and home appliances at the best prices with

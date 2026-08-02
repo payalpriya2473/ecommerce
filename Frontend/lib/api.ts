@@ -1953,7 +1953,8 @@ export type OfferSection =
   | 'coupon'
   | 'combo'
   | 'clearance'
-  | 'home_best';
+  | 'home_best'
+  | 'exchange_offer';
 
 export interface Offer {
   id: string;
@@ -1998,8 +1999,16 @@ export interface Offer {
   maxOff?: number | null;
   validTill?: string | null;
   // ── Brand deal fields (section = 'brand_deal') ──
+  brandId?: string | number | null;
   brandDealName?: string | null;
   discountLabel?: string | null;
+  // Joined from Brands Master (read-only on the offer, resolved via brandId)
+  brandMasterName?: string | null;
+  brandLogo?: string | null;
+  // ── Exchange offer fields (section = 'exchange_offer') ──
+  exchangeTitle?: string | null;
+  exchangePartnerName?: string | null;
+  ctaText?: string | null;
   // ── Products this offer is assigned to ──
   productIds?: Array<string | number> | null;
 }

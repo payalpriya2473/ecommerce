@@ -1,5 +1,6 @@
 import express from "express";
 import { db } from "../config/db.js";
+import { ensureOffersSchema } from "../controllers/offerController.js";
 
 const router = express.Router();
 
@@ -199,6 +200,7 @@ router.get("/items", async (req, res) => {
       brandId,
       itemGroupId,
       search,
+      ids: idsFilterParam,
       page = 1,
       limit = 20,
     } = req.query;
@@ -226,6 +228,18 @@ router.get("/items", async (req, res) => {
     if (search) {
       conditions.push("(i.itemName LIKE ? OR b.name LIKE ?)");
       params.push(`%${search}%`, `%${search}%`);
+    }
+    // Filter to an explicit set of product IDs (e.g. products linked to a
+    // specific offer via offer_products) — comma-separated list.
+    if (idsFilterParam) {
+      const idList = String(idsFilterParam)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (idList.length) {
+        conditions.push("i.id IN (?)");
+        params.push(idList);
+      }
     }
 
     const where = conditions.join(" AND ");
@@ -435,6 +449,8 @@ router.get("/items/:id", async (req, res) => {
 
 router.get("/offers", async (req, res) => {
   try {
+    // Older databases predate offer_products and the offer-type columns.
+    await ensureOffersSchema().catch(() => {});
     const { section, itemId } = req.query;
     const now = new Date();
 
@@ -460,6 +476,8 @@ router.get("/offers", async (req, res) => {
          i.offerPrice AS mrp,
          b.name       AS brandName,
          ig.name      AS itemGroupName,
+         bd.name      AS brandMasterName,
+         bd.iconUrl   AS brandLogoRaw,
          (
            SELECT imageUrl FROM item_images
            WHERE itemId = i.id ORDER BY sortOrder ASC LIMIT 1
@@ -470,11 +488,19 @@ router.get("/offers", async (req, res) => {
            JOIN item_variant_images ivi ON ivi.itemVariantColorId = ivc.id
            WHERE ivc.itemId = i.id AND ivc.isActive = 1
            ORDER BY ivc.sortOrder ASC, ivi.sortOrder ASC LIMIT 1
-         ) AS colorPrimaryImage
+         ) AS colorPrimaryImage,
+         (
+           SELECT COUNT(*) FROM offer_products op WHERE op.offerId = o.id
+         ) AS productCount,
+         (
+           SELECT GROUP_CONCAT(op.itemId ORDER BY op.itemId)
+           FROM offer_products op WHERE op.offerId = o.id
+         ) AS productIdsRaw
        FROM offers o
        LEFT JOIN items       i  ON o.itemId      = i.id
        LEFT JOIN brands      b  ON i.brandId     = b.id
        LEFT JOIN item_groups ig ON i.itemGroupId = ig.id
+       LEFT JOIN brands      bd ON o.brandId     = bd.id
        WHERE ${where.join(" AND ")}
        ORDER BY o.priority ASC, o.createdAt DESC`,
       params
@@ -487,6 +513,42 @@ router.get("/offers", async (req, res) => {
       return startOk && endOk;
     });
 
+    // Combo deals store their bundled products as JSON (comboItems) rather than
+    // a single itemId, so the items JOIN above never resolves an image for them.
+    // Look up the first bundled product's real photo here so combo cards on the
+    // website show an actual product image instead of always falling back to
+    // the generic placeholder.
+    const comboFirstItemIds = [];
+    for (const o of live) {
+      if (o.section !== "combo" || o.comboItems == null) continue;
+      try {
+        const arr = typeof o.comboItems === "string" ? JSON.parse(o.comboItems) : o.comboItems;
+        const firstId = Number(arr?.[0]?.itemId);
+        if (Number.isFinite(firstId) && firstId > 0) comboFirstItemIds.push(firstId);
+      } catch {
+        // ignore malformed combo JSON
+      }
+    }
+
+    let comboImageMap = {};
+    if (comboFirstItemIds.length) {
+      const uniqueIds = [...new Set(comboFirstItemIds)];
+      const [imgRows] = await db.query(
+        `SELECT i.id AS itemId,
+                COALESCE(
+                  (SELECT ivi.imageUrl FROM item_variant_colors ivc
+                   JOIN item_variant_images ivi ON ivi.itemVariantColorId = ivc.id
+                   WHERE ivc.itemId = i.id AND ivc.isActive = 1
+                   ORDER BY ivc.sortOrder ASC, ivi.sortOrder ASC LIMIT 1),
+                  (SELECT imageUrl FROM item_images WHERE itemId = i.id ORDER BY sortOrder ASC LIMIT 1)
+                ) AS image
+         FROM items i
+         WHERE i.id IN (?)`,
+        [uniqueIds]
+      );
+      for (const r of imgRows) comboImageMap[r.itemId] = imgUrl(r.image);
+    }
+
     const data = live.map((o) => {
       let comboItems = [];
       if (o.comboItems != null) {
@@ -496,13 +558,21 @@ router.get("/offers", async (req, res) => {
           comboItems = [];
         }
       }
+      const comboImage =
+        o.section === "combo" && comboItems[0]?.itemId
+          ? comboImageMap[Number(comboItems[0].itemId)]
+          : null;
       return {
         ...o,
-        primaryImage: imgUrl(o.colorPrimaryImage || o.legacyPrimaryImage),
+        primaryImage: comboImage || imgUrl(o.colorPrimaryImage || o.legacyPrimaryImage),
+        brandLogo: imgUrl(o.brandLogoRaw),
         tags: o.tags
           ? String(o.tags).split(",").map((t) => t.trim()).filter(Boolean)
           : [],
         comboItems,
+        productIds: o.productIdsRaw
+          ? String(o.productIdsRaw).split(",").map((v) => Number(v.trim())).filter((n) => !Number.isNaN(n))
+          : [],
       };
     });
 

@@ -488,7 +488,7 @@ export default function ProductDetail() {
       if (!fetchedItem) { setError("Product not found"); setLoading(false); return; }
 
       setItem(fetchedItem);
-      document.title = `${fetchedItem.itemName} | Motabhai Electronics`;
+      document.title = `${fetchedItem.itemName} | AppleNext Electronics`;
       const recentIds = saveRecentlyViewedItemId(fetchedItem.id).filter(
         (id) => id !== String(fetchedItem.id)
       );
@@ -933,7 +933,7 @@ export default function ProductDetail() {
                     <>
                       <span className="pd-price-current">{formatPrice(price)}</span>
                       {mrp > price && (
-                        <span style={{ fontSize: "0.82rem", color: "#565959" }}>
+                        <span style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
                           M.R.P.: <span className="pd-price-original">{formatPrice(mrp)}</span>
                         </span>
                       )}
@@ -942,7 +942,7 @@ export default function ProductDetail() {
                       )}
                     </>
                   ) : (
-                    <span style={{ color: "#565959", fontSize: "1rem" }}>
+                    <span style={{ color: "var(--text-secondary)", fontSize: "1rem" }}>
                       Price on request
                     </span>
                   )}
@@ -1130,39 +1130,6 @@ export default function ProductDetail() {
                 </div>
               </div> */}
 
-              {/* ════════════════════════════════════════════════
-                  FIX 2 & 3: ACTION BUTTONS — Motabhai brand colors
-                  Add to Cart  = red gradient  (was Amazon yellow)
-                  Buy Now      = orange/accent  (was Amazon orange-brown)
-                  ════════════════════════════════════════════════ */}
-              <div ref={actionRef} className="pd-action-btns">
-                <button
-                  type="button"
-                  className={`pd-btn-cart${!inStock ? " is-unavailable" : ""}`}
-                  onClick={() => purchaseTarget && handleAddToCart(purchaseTarget)}
-                  disabled={!inStock || !purchaseTarget}
-                >
-                  <i className={`fas ${inStock ? "fa-cart-plus" : "fa-ban"}`} />{" "}
-                  {inStock ? "Add to Cart" : "Unavailable"}
-                </button>
-                <button
-                  type="button"
-                  className={`pd-btn-buy${!inStock ? " is-notify" : ""}`}
-                  onClick={() => purchaseTarget && handleBuyNow(purchaseTarget)}
-                  disabled={!inStock || !purchaseTarget}
-                >
-                  <i className={`fas ${inStock ? "fa-bolt" : "fa-bell"}`} />{" "}
-                  {inStock ? "Buy Now" : "Notify Me"}
-                </button>
-              </div>
-              {!inStock && (
-                <div className="pd-stock-note" role="status" aria-live="polite">
-                  <div className="pd-stock-note-title">Coming Soon</div>
-                  <div className="pd-stock-note-copy">
-                    Out of stock right now. This product is still visible, and you can use Notify Me when it is available again.
-                  </div>
-                </div>
-              )}
               {/* <div ref={actionRef} className="pd-action-btns">
                 <button
                   type="button"
@@ -1255,6 +1222,40 @@ export default function ProductDetail() {
                   </div>
                 </div>
               </div>
+
+              {/* ════════════════════════════════════════════════
+                  FIX 2 & 3: ACTION BUTTONS — AppleNext brand colors
+                  Add to Cart  = red gradient  (was Amazon yellow)
+                  Buy Now      = orange/accent  (was Amazon orange-brown)
+                  ════════════════════════════════════════════════ */}
+              <div ref={actionRef} className="pd-action-btns">
+                <button
+                  type="button"
+                  className={`pd-btn-cart${!inStock ? " is-unavailable" : ""}`}
+                  onClick={() => purchaseTarget && handleAddToCart(purchaseTarget)}
+                  disabled={!inStock || !purchaseTarget}
+                >
+                  <i className={`fas ${inStock ? "fa-cart-plus" : "fa-ban"}`} />{" "}
+                  {inStock ? "Add to Cart" : "Unavailable"}
+                </button>
+                <button
+                  type="button"
+                  className={`pd-btn-buy${!inStock ? " is-notify" : ""}`}
+                  onClick={() => purchaseTarget && handleBuyNow(purchaseTarget)}
+                  disabled={!inStock || !purchaseTarget}
+                >
+                  <i className={`fas ${inStock ? "fa-bolt" : "fa-bell"}`} />{" "}
+                  {inStock ? "Buy Now" : "Notify Me"}
+                </button>
+              </div>
+              {!inStock && (
+                <div className="pd-stock-note" role="status" aria-live="polite">
+                  <div className="pd-stock-note-title">Coming Soon</div>
+                  <div className="pd-stock-note-copy">
+                    Out of stock right now. This product is still visible, and you can use Notify Me when it is available again.
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
@@ -1522,7 +1523,7 @@ export default function ProductDetail() {
                               )}
                             </>
                           ) : (
-                            <span style={{ fontSize: "0.75rem", color: "#565959" }}>
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
                               Price on request
                             </span>
                           )}
@@ -1543,7 +1544,7 @@ export default function ProductDetail() {
           )}
 
           {/* ════════════════════════════════════════════════
-              FIX 4: STICKY BUY BAR — Motabhai brand colors
+              FIX 4: STICKY BUY BAR — AppleNext brand colors
               Add to Cart = red,  Buy Now = orange
               ════════════════════════════════════════════════ */}
           {recentlyViewedItems.length > 0 && (
@@ -1650,7 +1651,7 @@ export default function ProductDetail() {
       <footer className="pd-footer">
         <div className="pd-footer-top">
           <div>
-            <div className="pd-footer-logo">MOTABHAI</div>
+            <div className="pd-footer-logo">APPLENEXT</div>
             <p className="pd-footer-desc">
               Your one-stop destination for genuine electronics at the best prices.
             </p>
@@ -1674,7 +1675,7 @@ export default function ProductDetail() {
           ))}
         </div>
         <div className="pd-footer-bottom">
-          <p>© 2026 Motabhai Electronics. All rights reserved.</p>
+          <p>© 2026 AppleNext Electronics. All rights reserved.</p>
           <div className="pd-footer-payments">
             {["Visa", "Mastercard", "UPI", "Net Banking", "EMI"].map((m) => (
               <span key={m}>{m}</span>

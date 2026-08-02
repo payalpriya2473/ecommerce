@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Motabhai Enterprise Suite",
+  title: "AppleNext Enterprise Suite",
   description:
     "Comprehensive multi-tenant ERP solution for managing companies, inventory, employees, and operations",
   generator: "v0.app",

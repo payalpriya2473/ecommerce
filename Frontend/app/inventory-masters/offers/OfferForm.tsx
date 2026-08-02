@@ -9,9 +9,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { AlertCircle, Tag, Package2, Landmark, Plus, Trash2 } from "lucide-react"
+import { AlertCircle, Tag, Package2, Landmark, Plus, Trash2, Calendar, Clock } from "lucide-react"
 import { SearchableItemSelect, type ItemOption } from "@/components/masters/searchable-item-select"
 import { SearchableMultiItemSelect } from "@/components/masters/searchable-multi-item-select"
+import { SearchableBrandSelect, toBrandIconUrl, type BrandOption } from "@/components/masters/searchable-brand-select"
 import type { OfferSection } from "@/lib/api"
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -71,11 +72,18 @@ export interface OfferFormValues {
   maxOff: string
   validTill: string
   // ── Brand deal (section = 'brand_deal') ──
+  brandId: string
   brandDealName: string
   discountLabel: string
-  // ── Shared card copy for coupon / brand ──
+  // ── Exchange offer (section = 'exchange_offer') ──
+  exchangeTitle: string
+  exchangePartnerName: string
+  ctaText: string
+  // ── Shared card copy for coupon / brand / exchange ──
   description: string
   colorTheme: string
+  // ── Eligible categories for exchange offers (comma separated) ──
+  tags: string
   // ── Products this offer applies to (shown on those product pages) ──
   productIds: string[]
 }
@@ -102,11 +110,53 @@ export const EMPTY_OFFER_FORM: OfferFormValues = {
   minOrder: "",
   maxOff: "",
   validTill: "",
+  brandId: "",
   brandDealName: "",
   discountLabel: "",
+  exchangeTitle: "",
+  exchangePartnerName: "",
+  ctaText: "",
   description: "",
   colorTheme: "blue",
+  tags: "",
   productIds: [],
+}
+
+// Soft pastel card backgrounds for Brand Deal cards on the website (distinct from the
+// bold BANK_COLOR_THEMES gradients used for Bank Offer / Coupon cards).
+export const BRAND_DEAL_PASTELS: { value: string; label: string; bg: string }[] = [
+  { value: "blue",   label: "Blue",   bg: "#eff6ff" },
+  { value: "green",  label: "Green",  bg: "#f0fdf4" },
+  { value: "orange", label: "Orange", bg: "#fff7ed" },
+  { value: "purple", label: "Purple", bg: "#fdf4ff" },
+  { value: "red",    label: "Red",    bg: "#fef2f2" },
+  { value: "teal",   label: "Teal",   bg: "#f0fdfa" },
+  { value: "dark",   label: "Slate",  bg: "#f1f5f9" },
+]
+
+// A custom color picked via the "+" swatch is stored directly as a hex string
+// (e.g. "#a1b2c3") in colorTheme, instead of one of the preset keys above.
+export const isCustomColorTheme = (theme?: string | null): boolean =>
+  !!theme && theme.startsWith("#")
+
+export const brandDealPastelBg = (theme?: string | null): string =>
+  isCustomColorTheme(theme) ? (theme as string) : (BRAND_DEAL_PASTELS.find((t) => t.value === theme)?.bg ?? BRAND_DEAL_PASTELS[0].bg)
+
+// Which offers sub-module list page a given section belongs to — used so the
+// Back/Cancel buttons on Add/Edit/View return to the page the user came from
+// instead of the generic Offers root.
+export function offersListRouteForSection(section?: string | null): string {
+  switch (section) {
+    case "bank_offer": return "/inventory-masters/offers/bank"
+    case "brand_deal": return "/inventory-masters/offers/brand"
+    case "coupon": return "/inventory-masters/offers/coupons"
+    case "combo":
+    case "clearance": return "/inventory-masters/offers/combo"
+    case "exchange_offer": return "/inventory-masters/offers/exchange"
+    case "flash_sale":
+    case "home_best":
+    default: return "/inventory-masters/offers/items"
+  }
 }
 
 export const SECTION_OPTIONS: { value: OfferSection; label: string }[] = [
@@ -117,6 +167,7 @@ export const SECTION_OPTIONS: { value: OfferSection; label: string }[] = [
   { value: "coupon",     label: "Coupon" },
   { value: "combo",      label: "Combo Deal" },
   { value: "clearance",  label: "Clearance" },
+  { value: "exchange_offer", label: "Exchange Offer" },
 ]
 
 // Shared color themes for bank offer cards (must match the website map)
@@ -184,6 +235,10 @@ export function buildOfferPayload(v: OfferFormValues, mode: "add" | "edit" = "ad
       comboItems: items,
       offerPrice: num(v.offerPrice) ?? null, // combo price
       badge: v.badge.trim() || null,
+      // "Apply to Products" is derived from the bundle's own products instead
+      // of asking the admin to re-pick them — this is what makes the combo
+      // deal show up on each bundled product's own detail page.
+      productIds: items.map((i) => i.itemId),
     }
   }
 
@@ -206,9 +261,26 @@ export function buildOfferPayload(v: OfferFormValues, mode: "add" | "edit" = "ad
     return {
       ...common,
       itemId: null,
+      brandId: v.brandId || null,
       brandDealName: v.brandDealName.trim() || null,
       discountLabel: v.discountLabel.trim() || null,
       description: v.description.trim() || null,
+      colorTheme: v.colorTheme || "blue",
+    }
+  }
+
+  if (v.section === "exchange_offer") {
+    return {
+      ...common,
+      itemId: null,
+      exchangeTitle: v.exchangeTitle.trim() || null,
+      exchangePartnerName: v.exchangePartnerName.trim() || null,
+      badge: v.badge.trim() || null,
+      maxOff: num(v.maxOff) ?? null,
+      minOrder: num(v.minOrder) ?? null,
+      tags: v.tags.trim() || null,
+      description: v.description.trim() || null,
+      ctaText: v.ctaText.trim() || null,
       colorTheme: v.colorTheme || "blue",
     }
   }
@@ -224,7 +296,21 @@ export function buildOfferPayload(v: OfferFormValues, mode: "add" | "edit" = "ad
     offerPrice: num(v.offerPrice) ?? null,
     soldPercent: v.section === "flash_sale" ? num(v.soldPercent) ?? null : null,
     stockLeft: v.section === "flash_sale" ? num(v.stockLeft) ?? null : null,
+    // "Apply to Products" is derived from the single product already picked
+    // above instead of asking the admin to re-select it.
+    productIds: v.itemId ? [v.itemId] : [],
   }
+}
+
+// Split a "yyyy-MM-ddTHH:mm" datetime-local value into separate date/time parts
+// so the form can show them as two distinct, clearly-labeled inputs.
+const splitDateTime = (v: string): { date: string; time: string } => {
+  const [date = "", time = ""] = (v || "").split("T")
+  return { date, time }
+}
+const joinDateTime = (date: string, time: string): string => {
+  if (!date) return ""
+  return `${date}T${time || "00:00"}`
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
@@ -237,6 +323,7 @@ export function OfferFormFields({
   isSubmitting,
   mode,
   items,
+  brands,
 }: {
   values: OfferFormValues
   onChange: (patch: Partial<OfferFormValues>) => void
@@ -244,9 +331,11 @@ export function OfferFormFields({
   onCancel: () => void
   error?: string
   isSubmitting: boolean
-  mode: "add" | "edit"
+  mode: "add" | "edit" | "view"
   items: OfferItemLite[]
+  brands: BrandOption[]
 }) {
+  const isView = mode === "view"
   const set = <K extends keyof OfferFormValues>(k: K, val: OfferFormValues[K]) =>
     onChange({ [k]: val } as Partial<OfferFormValues>)
 
@@ -304,7 +393,8 @@ export function OfferFormFields({
   const isCombo = values.section === "combo"
   const isCoupon = values.section === "coupon"
   const isBrand = values.section === "brand_deal"
-  const isProductBased = !isBank && !isCombo && !isCoupon && !isBrand
+  const isExchange = values.section === "exchange_offer"
+  const isProductBased = !isBank && !isCombo && !isCoupon && !isBrand && !isExchange
 
   // combo totals for preview
   const comboTotal = comboList.reduce((s, c) => s + (Number(c.price) || 0), 0)
@@ -332,16 +422,14 @@ export function OfferFormFields({
               <SearchableItemSelect
                 value={values.itemId}
                 items={items}
+                disabled={isView}
                 onValueChange={(id) => set("itemId", id)}
               />
-              <p className="text-xs text-muted-foreground">
-                Only products that exist in Item Master can be added. Name, brand, image, MRP, HSN &amp; GST come from the item.
-              </p>
             </div>
           )}
           <div className="space-y-2">
             <Label>Offer Section <span className="text-destructive">*</span></Label>
-            <Select value={values.section} onValueChange={(v) => set("section", v as OfferSection)}>
+            <Select value={values.section} onValueChange={(v) => set("section", v as OfferSection)} disabled={isView}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SECTION_OPTIONS.map((s) => (
@@ -353,7 +441,7 @@ export function OfferFormFields({
           {!isCoupon && !isBrand && (
             <div className="space-y-2">
               <Label>Badge text</Label>
-              <Input value={values.badge} onChange={(e) => set("badge", e.target.value)} placeholder="e.g. New Arrival, Best Seller" />
+              <Input value={values.badge} onChange={(e) => set("badge", e.target.value)} disabled={isView} />
             </div>
           )}
         </div>
@@ -389,33 +477,33 @@ export function OfferFormFields({
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Bank / Card Name <span className="text-destructive">*</span></Label>
-                  <Input value={bank.bankName} onChange={(e) => setBank(i, { bankName: e.target.value })} placeholder="e.g. HDFC Bank" />
+                  <Input value={bank.bankName} onChange={(e) => setBank(i, { bankName: e.target.value })} disabled={isView} />
                 </div>
                 <div className="space-y-2">
                   <Label>Short Code</Label>
-                  <Input value={bank.bankAbbr} onChange={(e) => setBank(i, { bankAbbr: e.target.value })} placeholder="e.g. HDFC" />
+                  <Input value={bank.bankAbbr} onChange={(e) => setBank(i, { bankAbbr: e.target.value })} disabled={isView} />
                 </div>
                 <div className="space-y-2">
                   <Label>Offer Headline</Label>
-                  <Input value={bank.offerText} onChange={(e) => setBank(i, { offerText: e.target.value })} placeholder="e.g. 10% or Rs 200" />
+                  <Input value={bank.offerText} onChange={(e) => setBank(i, { offerText: e.target.value })} disabled={isView} />
                 </div>
                 <div className="space-y-2">
                   <Label>Offer Subtitle</Label>
-                  <Input value={bank.offerSub} onChange={(e) => setBank(i, { offerSub: e.target.value })} placeholder="e.g. Instant Discount" />
+                  <Input value={bank.offerSub} onChange={(e) => setBank(i, { offerSub: e.target.value })} disabled={isView} />
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label>Description</Label>
                   <textarea
                     value={bank.description}
                     onChange={(e) => setBank(i, { description: e.target.value })}
-                    placeholder="e.g. Up to Rs 10,000 off on HDFC Credit/Debit Cards & EMI on orders above Rs 15,000"
                     rows={2}
-                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    disabled={isView}
+                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label>Card Tags <span className="text-muted-foreground text-xs font-normal">(comma separated)</span></Label>
-                  <Input value={bank.tags} onChange={(e) => setBank(i, { tags: e.target.value })} placeholder="e.g. Credit Card, Debit Card, EMI, No Cost EMI" />
+                  <Input value={bank.tags} onChange={(e) => setBank(i, { tags: e.target.value })} disabled={isView} />
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label>Card Color</Label>
@@ -424,9 +512,10 @@ export function OfferFormFields({
                       <button
                         key={t.value}
                         type="button"
+                        disabled={isView}
                         onClick={() => setBank(i, { colorTheme: t.value })}
                         title={t.label}
-                        className={`h-9 w-9 rounded-lg border-2 transition ${bank.colorTheme === t.value ? "border-foreground ring-2 ring-offset-1 ring-foreground/30" : "border-transparent"}`}
+                        className={`h-9 w-9 rounded-lg border-2 transition disabled:cursor-not-allowed disabled:opacity-50 ${bank.colorTheme === t.value ? "border-foreground ring-2 ring-offset-1 ring-foreground/30" : "border-transparent"}`}
                         style={{ background: t.gradient }}
                       />
                     ))}
@@ -465,14 +554,16 @@ export function OfferFormFields({
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Package2 className="h-4 w-4 text-accent" /> Combo Products
             </h3>
-            <Button type="button" size="sm" variant="outline" onClick={addComboItem} className="gap-1">
-              <Plus className="h-4 w-4" /> Add Product
-            </Button>
+            {!isView && (
+              <Button type="button" size="sm" variant="outline" onClick={addComboItem} className="gap-1">
+                <Plus className="h-4 w-4" /> Add Product
+              </Button>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label>Combo Title <span className="text-destructive">*</span></Label>
-            <Input value={values.comboTitle} onChange={(e) => set("comboTitle", e.target.value)} placeholder="e.g. Work From Home Bundle" />
+            <Input value={values.comboTitle} onChange={(e) => set("comboTitle", e.target.value)} disabled={isView} />
           </div>
 
           {comboList.map((ci, i) => (
@@ -482,6 +573,7 @@ export function OfferFormFields({
                 <SearchableItemSelect
                   value={ci.itemId}
                   items={items}
+                  disabled={isView}
                   onValueChange={(id) => {
                     const it = items.find((x) => String(x.id) === String(id))
                     setComboItem(i, { itemId: id, itemName: it?.itemName ?? "", price: it?.offerPrice != null ? String(it.offerPrice) : ci.price })
@@ -490,24 +582,26 @@ export function OfferFormFields({
               </div>
               <div className="space-y-2">
                 <Label>Price (₹)</Label>
-                <Input type="number" min="0" value={ci.price} onChange={(e) => setComboItem(i, { price: e.target.value })} placeholder="0" />
+                <Input type="number" min="0" value={ci.price} onChange={(e) => setComboItem(i, { price: e.target.value })} disabled={isView} />
               </div>
-              <Button type="button" size="icon" variant="ghost" onClick={() => removeComboItem(i)}
-                disabled={comboList.length <= 2}
-                className="h-10 w-10 text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40" title="Remove">
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {!isView && (
+                <Button type="button" size="icon" variant="ghost" onClick={() => removeComboItem(i)}
+                  disabled={comboList.length <= 2}
+                  className="h-10 w-10 text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40" title="Remove">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           ))}
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Combo Price (₹) <span className="text-destructive">*</span></Label>
-              <Input type="number" min="0" value={values.offerPrice} onChange={(e) => set("offerPrice", e.target.value)} placeholder="Total bundle price" />
+              <Input type="number" min="0" value={values.offerPrice} onChange={(e) => set("offerPrice", e.target.value)} disabled={isView} />
             </div>
             <div className="space-y-2">
               <Label>Badge</Label>
-              <Input value={values.badge} onChange={(e) => set("badge", e.target.value)} placeholder="e.g. Best Value" />
+              <Input value={values.badge} onChange={(e) => set("badge", e.target.value)} disabled={isView} />
             </div>
           </div>
 
@@ -532,38 +626,38 @@ export function OfferFormFields({
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Coupon Code <span className="text-destructive">*</span></Label>
-              <Input value={values.couponCode} onChange={(e) => set("couponCode", e.target.value.toUpperCase())} placeholder="e.g. MOTAB10" />
+              <Input value={values.couponCode} onChange={(e) => set("couponCode", e.target.value.toUpperCase())} disabled={isView} />
             </div>
             <div className="space-y-2">
               <Label>Title <span className="text-destructive">*</span></Label>
-              <Input value={values.couponTitle} onChange={(e) => set("couponTitle", e.target.value)} placeholder="e.g. Flat Rs 1,000 Off" />
+              <Input value={values.couponTitle} onChange={(e) => set("couponTitle", e.target.value)} disabled={isView} />
             </div>
             <div className="space-y-2">
               <Label>Category Label</Label>
-              <Input value={values.categoryLabel} onChange={(e) => set("categoryLabel", e.target.value)} placeholder="e.g. All Products, Mobiles, TVs" />
+              <Input value={values.categoryLabel} onChange={(e) => set("categoryLabel", e.target.value)} disabled={isView} />
             </div>
             <div className="space-y-2">
               <Label>Valid Till</Label>
-              <Input type="date" value={values.validTill} onChange={(e) => set("validTill", e.target.value)} />
+              <Input type="date" value={values.validTill} onChange={(e) => set("validTill", e.target.value)} disabled={isView} />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Description</Label>
-              <Input value={values.description} onChange={(e) => set("description", e.target.value)} placeholder="e.g. On all orders above Rs 15,000" />
+              <Input value={values.description} onChange={(e) => set("description", e.target.value)} disabled={isView} />
             </div>
             <div className="space-y-2">
               <Label>Min Order (₹)</Label>
-              <Input type="number" min="0" value={values.minOrder} onChange={(e) => set("minOrder", e.target.value)} placeholder="e.g. 15000" />
+              <Input type="number" min="0" value={values.minOrder} onChange={(e) => set("minOrder", e.target.value)} disabled={isView} />
             </div>
             <div className="space-y-2">
               <Label>Max Off (₹)</Label>
-              <Input type="number" min="0" value={values.maxOff} onChange={(e) => set("maxOff", e.target.value)} placeholder="e.g. 1000" />
+              <Input type="number" min="0" value={values.maxOff} onChange={(e) => set("maxOff", e.target.value)} disabled={isView} />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Card Color</Label>
               <div className="flex flex-wrap gap-2">
                 {BANK_COLOR_THEMES.map((t) => (
-                  <button key={t.value} type="button" onClick={() => set("colorTheme", t.value)} title={t.label}
-                    className={`h-9 w-9 rounded-lg border-2 transition ${values.colorTheme === t.value ? "border-foreground ring-2 ring-offset-1 ring-foreground/30" : "border-transparent"}`}
+                  <button key={t.value} type="button" disabled={isView} onClick={() => set("colorTheme", t.value)} title={t.label}
+                    className={`h-9 w-9 rounded-lg border-2 transition disabled:cursor-not-allowed disabled:opacity-50 ${values.colorTheme === t.value ? "border-foreground ring-2 ring-offset-1 ring-foreground/30" : "border-transparent"}`}
                     style={{ background: t.gradient }} />
                 ))}
               </div>
@@ -591,29 +685,135 @@ export function OfferFormFields({
           </h3>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Brand Name <span className="text-destructive">*</span></Label>
-              <Input value={values.brandDealName} onChange={(e) => set("brandDealName", e.target.value)} placeholder="e.g. Apple" />
+              <Label>Brand <span className="text-destructive">*</span></Label>
+              <SearchableBrandSelect
+                value={values.brandId}
+                brands={brands}
+                disabled={isView}
+                onValueChange={(id, brand) => onChange({
+                  brandId: id,
+                  brandDealName: brand?.name ?? "",
+                })}
+              />
             </div>
             <div className="space-y-2">
               <Label>Discount Label</Label>
-              <Input value={values.discountLabel} onChange={(e) => set("discountLabel", e.target.value)} placeholder="e.g. Up to 20% off" />
+              <Input value={values.discountLabel} onChange={(e) => set("discountLabel", e.target.value)} placeholder="e.g. Up to 20% off" disabled={isView} />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Description</Label>
-              <Input value={values.description} onChange={(e) => set("description", e.target.value)} placeholder="e.g. iPhones, MacBooks, iPads & Accessories" />
+              <Input value={values.description} onChange={(e) => set("description", e.target.value)} disabled={isView} />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Card Color</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                {BRAND_DEAL_PASTELS.map((t) => (
+                  <button key={t.value} type="button" disabled={isView} onClick={() => set("colorTheme", t.value)} title={t.label}
+                    className={`h-9 w-9 rounded-lg border-2 transition disabled:cursor-not-allowed disabled:opacity-50 ${values.colorTheme === t.value ? "border-foreground ring-2 ring-offset-1 ring-foreground/30" : "border-border"}`}
+                    style={{ background: t.bg }} />
+                ))}
+                {/* Custom color — click to open the native color picker */}
+                <div className="relative h-9 w-9">
+                  <div
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg border-2 transition ${isView ? "opacity-50" : ""} ${isCustomColorTheme(values.colorTheme) ? "border-foreground ring-2 ring-offset-1 ring-foreground/30" : "border-dashed border-border"}`}
+                    style={isCustomColorTheme(values.colorTheme) ? { background: values.colorTheme } : undefined}
+                    title="Custom color"
+                  >
+                    {!isCustomColorTheme(values.colorTheme) && <Plus className="h-4 w-4 text-muted-foreground" />}
+                  </div>
+                  <input
+                    type="color"
+                    disabled={isView}
+                    value={isCustomColorTheme(values.colorTheme) ? values.colorTheme : "#ffffff"}
+                    onChange={(e) => set("colorTheme", e.target.value)}
+                    className="absolute inset-0 h-9 w-9 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                    title="Pick a custom card color"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Brand deal preview — mirrors the website card exactly */}
+          <div
+            className="max-w-xs rounded-2xl border border-border p-6 text-center shadow-sm"
+            style={{ background: brandDealPastelBg(values.colorTheme) }}
+          >
+            {(() => {
+              const selectedBrand = brands.find((b) => String(b.id) === String(values.brandId))
+              return selectedBrand?.iconUrl ? (
+                <img src={toBrandIconUrl(selectedBrand.iconUrl)} alt={selectedBrand.name} className="mx-auto mb-2 h-12 w-12 object-contain" />
+              ) : (
+                <div className="mb-2 text-4xl">{(values.brandDealName || "🏷️").slice(0, 1)}</div>
+              )
+            })()}
+            <div className="mb-1 text-lg font-extrabold text-foreground">{values.brandDealName || "Brand Name"}</div>
+            <div className="mb-1 text-sm font-bold text-red-600">{values.discountLabel || "Up to 00% off"}</div>
+            <div className="mb-2 text-xs text-muted-foreground">{values.description || "Category, product line & accessories"}</div>
+            {values.productIds?.length ? (
+              <div className="mb-3 text-xs font-semibold text-muted-foreground/70">📦 {values.productIds.length} products</div>
+            ) : null}
+            <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-accent to-accent-secondary px-4 py-1.5 text-xs font-bold text-white">
+              Shop Now →
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Exchange offer fields ── */}
+      {isExchange && (
+        <div className="space-y-4 border-t pt-6">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Tag className="h-4 w-4 text-accent" /> Exchange Offer Details
+          </h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Exchange Title <span className="text-destructive">*</span></Label>
+              <Input value={values.exchangeTitle} onChange={(e) => set("exchangeTitle", e.target.value)} placeholder="e.g. Get Up to Rs 25,000 on Exchange" disabled={isView} />
+            </div>
+            <div className="space-y-2">
+              <Label>Partner Name</Label>
+              <Input value={values.exchangePartnerName} onChange={(e) => set("exchangePartnerName", e.target.value)} placeholder="e.g. Cashify" disabled={isView} />
+            </div>
+            <div className="space-y-2">
+              <Label>Bonus Amount (₹)</Label>
+              <Input type="number" min="0" value={values.maxOff} onChange={(e) => set("maxOff", e.target.value)} disabled={isView} />
+            </div>
+            <div className="space-y-2">
+              <Label>Min Device/Order Value (₹)</Label>
+              <Input type="number" min="0" value={values.minOrder} onChange={(e) => set("minOrder", e.target.value)} disabled={isView} />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Eligible Categories <span className="text-muted-foreground text-xs font-normal">(comma separated)</span></Label>
+              <Input value={values.tags} onChange={(e) => set("tags", e.target.value)} placeholder="e.g. Mobiles, Laptops" disabled={isView} />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Description / Terms</Label>
+              <Input value={values.description} onChange={(e) => set("description", e.target.value)} disabled={isView} />
+            </div>
+            <div className="space-y-2">
+              <Label>CTA Button Text</Label>
+              <Input value={values.ctaText} onChange={(e) => set("ctaText", e.target.value)} placeholder="e.g. Check Value" disabled={isView} />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Card Color</Label>
               <div className="flex flex-wrap gap-2">
                 {BANK_COLOR_THEMES.map((t) => (
-                  <button key={t.value} type="button" onClick={() => set("colorTheme", t.value)} title={t.label}
-                    className={`h-9 w-9 rounded-lg border-2 transition ${values.colorTheme === t.value ? "border-foreground ring-2 ring-offset-1 ring-foreground/30" : "border-transparent"}`}
+                  <button key={t.value} type="button" disabled={isView} onClick={() => set("colorTheme", t.value)} title={t.label}
+                    className={`h-9 w-9 rounded-lg border-2 transition disabled:cursor-not-allowed disabled:opacity-50 ${values.colorTheme === t.value ? "border-foreground ring-2 ring-offset-1 ring-foreground/30" : "border-transparent"}`}
                     style={{ background: t.gradient }} />
                 ))}
               </div>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Use “Apply to Products” below to link the products included in this brand deal — the card shows the count.</p>
+
+          {/* Exchange card preview — mirrors the website promo card */}
+          <div className="rounded-xl p-5 text-white shadow-md max-w-md" style={{ background: bankThemeGradient(values.colorTheme) }}>
+            <div className="text-xs font-bold uppercase opacity-80">{values.badge || "EXCHANGE OFFER"}</div>
+            <div className="mt-2 text-lg font-extrabold">{values.exchangeTitle || "Get Up to Rs 25,000 on Exchange"}</div>
+            {values.description && <p className="mt-2 text-sm opacity-90 line-clamp-2">{values.description}</p>}
+            <div className="mt-3 text-sm font-semibold">{values.ctaText || "Check Value"} →</div>
+          </div>
         </div>
       )}
 
@@ -626,7 +826,7 @@ export function OfferFormFields({
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label>Discount Type</Label>
-            <Select value={values.discountType} onValueChange={(v) => set("discountType", v as "percent" | "amount")}>
+            <Select value={values.discountType} onValueChange={(v) => set("discountType", v as "percent" | "amount")} disabled={isView}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="percent">Percent (%)</SelectItem>
@@ -637,14 +837,12 @@ export function OfferFormFields({
           <div className="space-y-2">
             <Label>Discount {values.discountType === "percent" ? "(%)" : "(₹)"}</Label>
             <Input type="number" min="0" value={values.discountValue}
-              onChange={(e) => set("discountValue", e.target.value)}
-              placeholder={values.discountType === "percent" ? "e.g. 10" : "e.g. 1000"} />
+              onChange={(e) => set("discountValue", e.target.value)} disabled={isView} />
           </div>
           <div className="space-y-2">
             <Label>Offer Price (₹) <span className="text-muted-foreground text-xs font-normal">(optional override)</span></Label>
             <Input type="number" min="0" value={values.offerPrice}
-              onChange={(e) => set("offerPrice", e.target.value)}
-              placeholder="Auto-calculated if blank" />
+              onChange={(e) => set("offerPrice", e.target.value)} disabled={isView} />
           </div>
         </div>
 
@@ -671,31 +869,36 @@ export function OfferFormFields({
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Sold (%)</Label>
-              <Input type="number" min="0" max="100" value={values.soldPercent} onChange={(e) => set("soldPercent", e.target.value)} placeholder="e.g. 78" />
+              <Input type="number" min="0" max="100" value={values.soldPercent} onChange={(e) => set("soldPercent", e.target.value)} disabled={isView} />
             </div>
             <div className="space-y-2">
               <Label>Stock Left</Label>
-              <Input type="number" min="0" value={values.stockLeft} onChange={(e) => set("stockLeft", e.target.value)} placeholder="e.g. 22" />
+              <Input type="number" min="0" value={values.stockLeft} onChange={(e) => set("stockLeft", e.target.value)} disabled={isView} />
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Apply to products ── */}
-      <div className="space-y-4 border-t pt-6">
-        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <Package2 className="h-4 w-4 text-accent" /> Apply to Products
-          {values.productIds?.length ? <span className="text-xs font-normal text-muted-foreground">({values.productIds.length} selected)</span> : null}
-        </h3>
-        <SearchableMultiItemSelect
-          values={values.productIds ?? []}
-          items={items}
-          onChange={(ids) => set("productIds", ids)}
-        />
-        <p className="text-xs text-muted-foreground">
-          These product pages will display this offer. Leave empty for an offer that only appears on the Offers page.
-        </p>
-      </div>
+      {/* ── Apply to products ──
+           Only shown for offer types that have no product picker elsewhere in
+           the form (Bank Offer, Coupon, Brand Deal). Flash Sale / Today's Best
+           Offer / Clearance already pick their product above, and Combo Deal
+           already picks its bundled products below — for those, the
+           product↔offer link is derived automatically instead of asking again. */}
+      {!isProductBased && !isCombo && (
+        <div className="space-y-4 border-t pt-6">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Package2 className="h-4 w-4 text-accent" /> Apply to Products
+            {values.productIds?.length ? <span className="text-xs font-normal text-muted-foreground">({values.productIds.length} selected)</span> : null}
+          </h3>
+          <SearchableMultiItemSelect
+            values={values.productIds ?? []}
+            items={items}
+            disabled={isView}
+            onChange={(ids) => set("productIds", ids)}
+          />
+        </div>
+      )}
 
       {/* ── Display & schedule ── */}
       <div className="space-y-4 border-t pt-6">
@@ -703,20 +906,59 @@ export function OfferFormFields({
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label>Priority <span className="text-muted-foreground text-xs font-normal">(lower = shown first)</span></Label>
-            <Input type="number" value={values.priority} onChange={(e) => set("priority", e.target.value)} placeholder="0" />
+            <Input type="number" value={values.priority} onChange={(e) => set("priority", e.target.value)} disabled={isView} />
           </div>
           <div className="space-y-2">
             <Label>Start date &amp; time</Label>
-            <Input type="datetime-local" value={values.startAt} onChange={(e) => set("startAt", e.target.value)} />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="relative">
+                <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="date"
+                  className="pl-9"
+                  disabled={isView}
+                  value={splitDateTime(values.startAt).date}
+                  onChange={(e) => set("startAt", joinDateTime(e.target.value, splitDateTime(values.startAt).time))}
+                />
+              </div>
+              <div className="relative">
+                <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="time"
+                  className="pl-9"
+                  disabled={isView}
+                  value={splitDateTime(values.startAt).time}
+                  onChange={(e) => set("startAt", joinDateTime(splitDateTime(values.startAt).date, e.target.value))}
+                />
+              </div>
+            </div>
           </div>
           <div className="space-y-2">
             <Label>End date &amp; time</Label>
-            <Input type="datetime-local" value={values.endAt} onChange={(e) => set("endAt", e.target.value)} />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="relative">
+                <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="date"
+                  className="pl-9"
+                  disabled={isView}
+                  value={splitDateTime(values.endAt).date}
+                  onChange={(e) => set("endAt", joinDateTime(e.target.value, splitDateTime(values.endAt).time))}
+                />
+              </div>
+              <div className="relative">
+                <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="time"
+                  className="pl-9"
+                  disabled={isView}
+                  value={splitDateTime(values.endAt).time}
+                  onChange={(e) => set("endAt", joinDateTime(splitDateTime(values.endAt).date, e.target.value))}
+                />
+              </div>
+            </div>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          The offer only appears on the website between the start and end times. Leave blank to show it as long as it&apos;s Active.
-        </p>
       </div>
 
       {/* ── Status ── */}
@@ -727,6 +969,7 @@ export function OfferFormFields({
             id="offer-status"
             checked={values.isActive}
             onCheckedChange={(c) => set("isActive", c)}
+            disabled={isView}
             className="h-6 w-11 data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-slate-200 [&_[data-slot=switch-thumb]]:size-5 [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:shadow"
           />
           <span className={`text-sm font-semibold ${values.isActive ? "text-emerald-600" : "text-muted-foreground"}`}>
@@ -737,16 +980,18 @@ export function OfferFormFields({
 
       {/* ── Actions ── */}
       <div className="flex gap-3 border-t pt-6">
-        <Button
-          type="button"
-          onClick={onSubmit}
-          disabled={isSubmitting}
-          className="bg-gradient-to-r from-accent to-accent-secondary hover:opacity-90"
-        >
-          {isSubmitting ? "Saving..." : mode === "add" ? "Add Offer" : "Save Changes"}
-        </Button>
+        {!isView && (
+          <Button
+            type="button"
+            onClick={onSubmit}
+            disabled={isSubmitting}
+            className="bg-gradient-to-r from-accent to-accent-secondary hover:opacity-90"
+          >
+            {isSubmitting ? "Saving..." : mode === "add" ? "Add Offer" : "Save Changes"}
+          </Button>
+        )}
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
-          Cancel
+          {isView ? "Back" : "Cancel"}
         </Button>
       </div>
     </div>

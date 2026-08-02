@@ -8,6 +8,7 @@
 import express from "express";
 import { db } from "../config/db.js";
 import { requireCustomer } from "../middleware/customerAuth.js";
+import { ensureOrderPaymentSchema } from "../services/orderPaymentService.js";
 
 const router = express.Router();
 router.use(requireCustomer);
@@ -105,13 +106,19 @@ async function ensureSchema() {
           orderNumber VARCHAR(40) NOT NULL DEFAULT '',
           customerId BIGINT(20) NOT NULL,
           companyId BIGINT(11) DEFAULT NULL,
-          status ENUM('processing','shipped','delivered','cancelled','returned') NOT NULL DEFAULT 'processing',
+          status ENUM('pending_payment','processing','shipped','delivered','cancelled','returned','payment_failed') NOT NULL DEFAULT 'processing',
           statusLabel VARCHAR(80) NOT NULL DEFAULT 'Order Placed',
           paymentMethod VARCHAR(30) NOT NULL DEFAULT 'cod',
           paymentDetail VARCHAR(150) DEFAULT NULL,
           paymentStatus ENUM('pending','paid','failed','refunded') NOT NULL DEFAULT 'pending',
           deliveryType VARCHAR(30) NOT NULL DEFAULT 'free',
           deliveryLabel VARCHAR(80) DEFAULT NULL,
+          paymentProvider VARCHAR(30) DEFAULT NULL,
+          providerOrderId VARCHAR(80) DEFAULT NULL,
+          providerPaymentId VARCHAR(80) DEFAULT NULL,
+          providerSignature VARCHAR(255) DEFAULT NULL,
+          paymentError VARCHAR(255) DEFAULT NULL,
+          paidAt TIMESTAMP NULL DEFAULT NULL,
           couponCode VARCHAR(40) DEFAULT NULL,
           subtotal DECIMAL(12,2) NOT NULL DEFAULT 0.00,
           productDiscount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -160,6 +167,7 @@ async function ensureSchema() {
           KEY idx_website_order_items_order (orderId)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
       `);
+      await ensureOrderPaymentSchema();
     })().catch((e) => {
       schemaReady = null;
       throw e;
@@ -171,6 +179,8 @@ async function ensureSchema() {
 // ─── Row → API shape ─────────────────────────────────────────────────────────
 
 const STATUS_LABELS = {
+  pending_payment: "Awaiting Payment",
+  payment_failed: "Payment Failed",
   processing: "Order Placed",
   shipped: "Shipped",
   delivered: "Delivered",
@@ -190,6 +200,12 @@ function mapOrder(order, items) {
     paymentMethod: order.paymentMethod,
     paymentDetail: order.paymentDetail,
     paymentStatus: order.paymentStatus,
+    paymentProvider: order.paymentProvider ?? null,
+    providerOrderId: order.providerOrderId ?? null,
+    providerPaymentId: order.providerPaymentId ?? null,
+    paymentError: order.paymentError ?? null,
+    paidAt: order.paidAt ?? null,
+    requiresPayment: order.paymentMethod !== "cod" && order.paymentStatus !== "paid",
     deliveryType: order.deliveryType,
     deliveryLabel: order.deliveryLabel,
     couponCode: order.couponCode,
@@ -465,6 +481,12 @@ router.post("/", async (req, res) => {
     connection = await db.getConnection();
     await connection.beginTransaction();
 
+    // Card / UPI / netbanking / wallet orders are only "placed" once the money
+    // lands. COD is placed immediately.
+    const isCod = paymentMethod === "cod";
+    const initialStatus = isCod ? "processing" : "pending_payment";
+    const initialStatusLabel = isCod ? "Order Placed" : "Awaiting Payment";
+
     const [result] = await connection.query(
       `INSERT INTO website_orders
          (orderNumber, customerId, companyId, status, statusLabel,
@@ -474,7 +496,7 @@ router.post("/", async (req, res) => {
           deliveryCharge, codFee, taxAmount, totalAmount,
           addressId, shipType, shipName, shipPhone, shipLine1, shipLine2,
           shipCity, shipState, shipPinCode, notes)
-       VALUES (?, ?, ?, 'processing', 'Order Placed',
+       VALUES (?, ?, ?, ?, ?,
                ?, ?, ?,
                ?, ?, ?,
                ?, ?, ?, ?,
@@ -485,9 +507,11 @@ router.post("/", async (req, res) => {
         "",
         customerId,
         companyId,
+        initialStatus,
+        initialStatusLabel,
         paymentMethod,
         paymentDetail,
-        paymentMethod === "cod" ? "pending" : "paid",
+        "pending",
         deliveryType,
         totals.deliveryLabel,
         couponCode ? String(couponCode).toUpperCase() : null,
@@ -544,7 +568,9 @@ router.post("/", async (req, res) => {
       ]
     );
 
-    if (clearCart !== false) {
+    // Online payments clear the cart in markOrderPaid() instead, so an
+    // abandoned payment doesn't lose the customer's basket.
+    if (clearCart !== false && isCod) {
       const orderedIds = lines.map((l) => l.itemId).filter((id) => id != null);
       if (orderedIds.length > 0) {
         await connection.query(

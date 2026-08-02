@@ -135,14 +135,15 @@ export const announcementItems: AnnouncementItem[] = [
     { icon: "fa-credit-card", text: "No-Cost EMI Available" },
 ];
 
+/**
+ * Fixed navigation "chrome" only. Category links are no longer hardcoded here —
+ * the header pulls them live from Category Management (see StorefrontHeader),
+ * so adding, renaming, reordering or deactivating a category in the admin panel
+ * updates the menu with no code change.
+ */
 export const navLinks: NavLink[] = [
     { label: "Home", icon: "fa-house", href: "/" },
-    { label: "Mobiles", icon: "fa-mobile-screen", href: "/category" },
-    { label: "TVs", icon: "fa-tv", href: "/category" },
-    { label: "Laptops", icon: "fa-laptop", href: "/category" },
-    { label: "Appliances", icon: "fa-blender", href: "/category" },
     { label: "Brands", icon: "fa-award", href: "/brands" },
-    { label: "Blog", icon: "fa-newspaper", href: "/blog" },
     { label: "About", icon: "fa-building", href: "/about" },
     { label: "Offers", icon: "fa-bolt", href: "/offers", highlighted: true },
 ];
@@ -592,7 +593,7 @@ export const pageCopy = {
     viewAll: "View All",
     dealPrimary: "Buy Now",
     dealSecondary: "Add to Cart",
-    footerCopyright: "© 2026 Motabhai Electronics. All rights reserved.",
+    footerCopyright: "© 2026 AppleNext Electronics. All rights reserved.",
 };
 
 export const sections: {

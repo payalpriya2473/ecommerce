@@ -1,5 +1,137 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   APPLENEXT DESIGN TOKENS
+   Palette sampled from applenext.in (light + dark).
+   Every storefront stylesheet references these variables, so switching
+   [data-theme] on <html> re-skins the whole site.
+   ========================================================================== */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #f7f7f9;
+  --bg-subtle: #f1f1f5;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-dark: #111116;      /* nav bar, footer, toasts — dark in both themes */
+  --surface-dark-2: #1b1b22;
+
+  /* Text */
+  --ink: #111116;
+  --ink-soft: #21212a;
+  --text-strong: #2f2f39;
+  --text-body: #4a4a56;
+  --text-secondary: #6b6b77;
+  --text-muted: #93939f;
+  --on-accent: #ffffff;
+  --on-dark: #f4f4f6;
+  --on-dark-muted: rgba(244, 244, 246, 0.72);
+
+  /* Borders */
+  --border: #e6e6ec;
+  --border-subtle: #f0f0f4;
+  --border-strong: #d3d3dc;
+
+  /* Brand */
+  --brand: #eb2d23;
+  --brand-dark: #cf2119;
+  --brand-darker: #a81a13;
+  --brand-light: #f4483e;
+  --brand-glow: #ff5a4f;
+  --brand-tint: #fdf0ef;
+  --brand-tint-strong: #f9d9d6;
+  --brand-ring: rgba(235, 45, 35, 0.16);
+  --brand-shadow: rgba(235, 45, 35, 0.28);
+  --brand-gradient: linear-gradient(135deg, #eb2d23, #cf2119);
+
+  /* Semantic */
+  --success: #17a34a;
+  --success-strong: #12813a;
+  --success-tint: #eefbf2;
+  --success-border: #cdf0d9;
+  --info: #2563eb;
+  --info-strong: #1d4ed8;
+  --info-tint: #eef4ff;
+  --info-border: #d3e1fd;
+  --warning: #b45309;
+  --warning-strong: #92400e;
+  --warning-tint: #fff8ec;
+  --warning-border: #fbe3bd;
+  --star: #f5a524;
+
+  /* Effects */
+  --shadow-sm: 0 1px 2px rgba(17, 17, 22, 0.05);
+  --shadow-md: 0 4px 12px rgba(17, 17, 22, 0.08);
+  --shadow-lg: 0 12px 30px rgba(17, 17, 22, 0.12);
+  --overlay: rgba(17, 17, 22, 0.55);
+  --skeleton: #ececf1;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --bg: #0b0b0f;
+  --bg-subtle: #16161c;
+  --surface: #131319;
+  --surface-raised: #1b1b22;
+  --surface-dark: #16161c;
+  --surface-dark-2: #1f1f27;
+
+  /* Text */
+  --ink: #f4f4f6;
+  --ink-soft: #e7e7ec;
+  --text-strong: #d8d8e0;
+  --text-body: #bcbcc7;
+  --text-secondary: #9a9aa6;
+  --text-muted: #75757f;
+  --on-accent: #ffffff;
+  --on-dark: #f4f4f6;
+  --on-dark-muted: rgba(244, 244, 246, 0.7);
+
+  /* Borders */
+  --border: #292932;
+  --border-subtle: #212129;
+  --border-strong: #3a3a46;
+
+  /* Brand */
+  --brand: #ff3b30;
+  --brand-dark: #e62d23;
+  --brand-darker: #c02219;
+  --brand-light: #ff5b52;
+  --brand-glow: #ff7a72;
+  --brand-tint: rgba(255, 59, 48, 0.14);
+  --brand-tint-strong: rgba(255, 59, 48, 0.28);
+  --brand-ring: rgba(255, 59, 48, 0.24);
+  --brand-shadow: rgba(255, 59, 48, 0.4);
+  --brand-gradient: linear-gradient(135deg, #ff3b30, #e62d23);
+
+  /* Semantic */
+  --success: #34d17a;
+  --success-strong: #22c55e;
+  --success-tint: rgba(52, 209, 122, 0.14);
+  --success-border: rgba(52, 209, 122, 0.32);
+  --info: #6ea8ff;
+  --info-strong: #4d8dfa;
+  --info-tint: rgba(110, 168, 255, 0.14);
+  --info-border: rgba(110, 168, 255, 0.32);
+  --warning: #f0b357;
+  --warning-strong: #e59f31;
+  --warning-tint: rgba(240, 179, 87, 0.14);
+  --warning-border: rgba(240, 179, 87, 0.32);
+  --star: #ffc94d;
+
+  /* Effects */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.6);
+  --overlay: rgba(0, 0, 0, 0.7);
+  --skeleton: #1f1f27;
+}
+
 @keyframes marquee {
   0% {
     transform: translateX(0);
@@ -17,13 +149,40 @@
 }
 
 :root {
-  color-scheme: light;
   font-family: var(--font-inter), system-ui, sans-serif;
 }
 
+html {
+  background: var(--bg);
+}
+
 body {
-  @apply min-h-screen bg-slate-50 text-slate-900 antialiased;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Theme change should feel deliberate, not jarring */
+main,
+header,
+footer,
+section,
+aside {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body,
+  main,
+  header,
+  footer,
+  section,
+  aside {
+    transition: none;
+  }
 }
 
 * {
@@ -31,17 +190,39 @@ body {
 }
 
 a {
-  @apply text-slate-900 no-underline;
+  color: var(--ink);
+  text-decoration: none;
 }
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  background-color: var(--surface);
+  color: var(--ink);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
 }
 
 img {
-  @apply block max-w-full h-auto;
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+::selection {
+  background: var(--brand);
+  color: var(--on-accent);
 }
 
 ::-webkit-scrollbar {
@@ -53,6 +234,70 @@ img {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
+  background: var(--border-strong);
   border-radius: 9999px;
+}
+
+
+/* ============================================================================
+   DARK-THEME REFINEMENTS
+   Product photography is shot on white, so image tiles keep a light neutral
+   plate in dark mode — otherwise cut-outs read as random bright rectangles.
+   ========================================================================== */
+
+[data-theme="dark"] {
+  --product-tile: #eef0f4;
+}
+
+[data-theme="dark"] .product-image,
+[data-theme="dark"] .product-image-link,
+[data-theme="dark"] .quick-view-image,
+[data-theme="dark"] .ci-img,
+[data-theme="dark"] .reco-card-img,
+[data-theme="dark"] .saved-card-img,
+[data-theme="dark"] .co-os-item-img,
+[data-theme="dark"] .ri-img,
+[data-theme="dark"] .wl-card-img,
+[data-theme="dark"] .acc-thumb,
+[data-theme="dark"] .acc-wish-img,
+[data-theme="dark"] .acc-track-item-img,
+[data-theme="dark"] .srp-card-img-wrap,
+[data-theme="dark"] .srp-list-img,
+[data-theme="dark"] .srp-cs-img,
+[data-theme="dark"] .srp-cmp-product-img,
+[data-theme="dark"] .srp-qv-main-img,
+[data-theme="dark"] .off-cl-img,
+[data-theme="dark"] .off-combo-img,
+[data-theme="dark"] .off-flash-img,
+[data-theme="dark"] .pd-main-img,
+[data-theme="dark"] .pd-thumb-btn,
+[data-theme="dark"] .pd-color-thumb,
+[data-theme="dark"] .brand-logo.has-image,
+[data-theme="dark"] .bp-brand-logo {
+  background: var(--product-tile);
+}
+
+/* The announcement strip is a full-bleed red band — softened in dark so the
+   page opens calmly instead of shouting. */
+[data-theme="dark"] .sf-ann-bar,
+[data-theme="dark"] .ann-bar,
+[data-theme="dark"] .co-ann-bar {
+  background: linear-gradient(90deg, #1a0f0f, #2a1210, #1a0f0f);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  animation: none;
+}
+
+[data-theme="dark"] .sf-ann-item,
+[data-theme="dark"] .ann-item {
+  color: var(--on-dark-muted);
+}
+
+[data-theme="dark"] .sf-ann-item i,
+[data-theme="dark"] .ann-item i {
+  color: var(--brand);
+}
+
+/* Dark surfaces need a hairline instead of a shadow to separate cards */
+[data-theme="dark"] .sf-site-header {
+  border-bottom: 1px solid var(--border);
 }

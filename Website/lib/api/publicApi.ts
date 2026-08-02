@@ -422,16 +422,24 @@ export interface PublicOffer {
   comboTitle?: string | null;
   comboItems?: Array<{ itemId: string | number; itemName?: string; price?: number }>;
   // coupon fields
-  couponCode?: string | null;
   couponTitle?: string | null;
   categoryLabel?: string | null;
   minOrder?: number | null;
   maxOff?: number | null;
   validTill?: string | null;
   // brand deal fields
+  brandId?: string | number | null;
   brandDealName?: string | null;
   discountLabel?: string | null;
+  // Joined from Brands Master (resolved via brandId)
+  brandMasterName?: string | null;
+  brandLogo?: string | null;
+  // exchange offer fields
+  exchangeTitle?: string | null;
+  exchangePartnerName?: string | null;
+  ctaText?: string | null;
   productIds?: Array<string | number>;
+  productCount?: number | null;
 }
 
 export const publicOfferAPI = {
@@ -463,6 +471,26 @@ export const BANK_THEME_GRADIENTS: Record<string, string> = {
 
 export function bankOfferGradient(theme?: string | null): string {
   return BANK_THEME_GRADIENTS[theme || "blue"] || BANK_THEME_GRADIENTS.blue;
+}
+
+// Soft pastel card backgrounds for Brand Deal cards (must match the admin
+// OfferForm's BRAND_DEAL_PASTELS). Distinct from BANK_THEME_GRADIENTS, which
+// are bold/dark and meant for Bank Offer / Coupon cards with white text.
+export const BRAND_DEAL_PASTELS: Record<string, string> = {
+  blue:   "#eff6ff",
+  green:  "#f0fdf4",
+  orange: "#fff7ed",
+  purple: "#fdf4ff",
+  red:    "#fef2f2",
+  teal:   "#f0fdfa",
+  dark:   "#f1f5f9",
+};
+
+export function brandDealPastel(theme?: string | null): string {
+  // A custom colour picked via the admin's "+" swatch is stored as a raw hex
+  // string (e.g. "#a1b2c3") instead of one of the preset keys above.
+  if (theme && theme.startsWith("#")) return theme;
+  return BRAND_DEAL_PASTELS[theme || "dark"] || BRAND_DEAL_PASTELS.dark;
 }
 
 export function getItemOfferPrice(item: Pick<Item, "offerPrice" | "nlc">): number {

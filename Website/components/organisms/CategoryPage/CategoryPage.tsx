@@ -2,7 +2,7 @@
 // app/category/CategoryPage.tsx
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   announcementItems,
@@ -140,6 +140,9 @@ export default function CategoryPage() {
     searchParams.get("category") ?? searchParams.get("slug") ?? undefined;
   const categoryId =
     searchParams.get("categoryId") ?? searchParams.get("id") ?? undefined;
+  // Brand cards link here as /products?brandId=… — without this the param was
+  // read by nobody and every brand landed on an unfiltered product list.
+  const brandIdParam = searchParams.get("brandId") ?? undefined;
 
   const {
     category,
@@ -166,10 +169,28 @@ export default function CategoryPage() {
 
   useEffect(() => {
     const pageTitle = category?.name
-      ? `${category.name} Products | Motabhai Electronics`
-      : "All Products | Motabhai Electronics";
+      ? `${category.name} Products | AppleNext Electronics`
+      : "All Products | AppleNext Electronics";
     document.title = pageTitle;
   }, [category]);
+
+  // Seed the brand filter from ?brandId= once the brand list has loaded. Keyed
+  // on the param so navigating between brands re-applies, and guarded on the
+  // current filter so the user can still untick it without it snapping back.
+  const seededBrandRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!brandIdParam) {
+      seededBrandRef.current = null;
+      return;
+    }
+    if (seededBrandRef.current === brandIdParam) return;
+    if (!availableBrands.some((b) => String(b.id) === String(brandIdParam))) return;
+    seededBrandRef.current = brandIdParam;
+    if (!filters.brands.includes(brandIdParam)) toggleBrand(brandIdParam);
+    // filters.brands is intentionally not a dependency — this runs once per
+    // brandId, not every time the user changes a filter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandIdParam, availableBrands, toggleBrand]);
 
   // ── UI-only state ────────────────────────────────────────────────────────
   type ViewMode = "grid" | "list";
@@ -924,7 +945,7 @@ export default function CategoryPage() {
       <footer className="footer">
         <div className="footer-top">
           <div className="footer-brand">
-            <div className="footer-logo-text">MOTABHAI</div>
+            <div className="footer-logo-text">APPLENEXT</div>
             <p>Your one-stop destination for the latest electronics, mobile phones, laptops, and home appliances at the best prices with genuine warranty.</p>
             <div className="footer-social">
               {footerSocialIcons.map((icon) => (
@@ -940,7 +961,7 @@ export default function CategoryPage() {
           ))}
         </div>
         <div className="footer-bottom">
-          <p>© 2026 Motabhai Electronics. All rights reserved.</p>
+          <p>© 2026 AppleNext Electronics. All rights reserved.</p>
           <div className="footer-payments">
             {["Visa", "Mastercard", "UPI", "Net Banking", "EMI"].map((item) => (
               <span key={item}>{item}</span>

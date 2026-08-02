@@ -39,7 +39,7 @@ const DEFAULT_CONFIG: EmailConfig = {
   smtpSecure: "tls",
   smtpUser: "",
   smtpPassword: "",
-  fromName: "Motabhai Enterprise Suite",
+  fromName: "AppleNext Enterprise Suite",
   fromEmail: "",
   isActive: false,
 };
@@ -213,7 +213,7 @@ export default function EmailConfigPage() {
                     Email / SMTP Configuration
                   </h1>
                   {/* <p className="mt-1 max-w-3xl text-sm text-muted-foreground sm:text-base">
-                    Configure outgoing email server settings for invoices, alerts, and test emails from the Motabhai suite.
+                    Configure outgoing email server settings for invoices, alerts, and test emails from the AppleNext suite.
                   </p> */}
                 </div>
               </div>
@@ -396,7 +396,7 @@ export default function EmailConfigPage() {
                           type="text"
                           value={config.fromName}
                           onChange={(e) => set("fromName", e.target.value)}
-                          placeholder="Motabhai Enterprise Suite"
+                          placeholder="AppleNext Enterprise Suite"
                           className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm text-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                         />
                         {/* <p className="mt-1 text-xs text-muted-foreground">This is the display name in recipients' inboxes.</p> */}
@@ -408,7 +408,7 @@ export default function EmailConfigPage() {
                           type="email"
                           value={config.fromEmail}
                           onChange={(e) => set("fromEmail", e.target.value)}
-                          placeholder="noreply@motabhai.com"
+                          placeholder="noreply@applenext.in"
                           className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm text-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                         />
                         {/* <p className="mt-1 text-xs text-muted-foreground">Leave blank to use the SMTP username as sender.</p> */}

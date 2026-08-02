@@ -28,9 +28,13 @@ import customerWishlistRouter from "./routes/customerWishlist.js";
 import customerCartRouter    from "./routes/customerCart.js";
 import customerProfileRouter from "./routes/customerProfile.js";
 import customerOrdersRouter  from "./routes/customerOrders.js";
+import contactRouter         from "./routes/contactRoutes.js";
+import customerPaymentsRouter from "./routes/customerPayments.js";
+import razorpayWebhookRouter from "./routes/razorpayWebhook.js";
 import stockRoutes from './routes/stockRoutes.js';
 import emailConfigRoutes from './routes/emailConfigRoutes.js';
 import { startStockSyncCron } from './cron/syncStockCron.js';
+import { checkDbConnection, dbStatus } from './config/db.js';
 
 
 dotenv.config();
@@ -106,6 +110,11 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Payment webhooks are signature-checked against the exact bytes we received,
+// so they must be mounted BEFORE the JSON body parser.
+app.use("/api/webhooks", express.raw({ type: "*/*" }), razorpayWebhookRouter);
+app.use("/motabhai_next_backend/api/webhooks", express.raw({ type: "*/*" }), razorpayWebhookRouter);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -120,7 +129,7 @@ if (NODE_ENV === 'dev' || NODE_ENV === 'development') {
 // Define routes on the router instead of app
 router.get("/", (req, res) => {
   res.json({
-    message: "Motabhai Backend API 🚀",
+    message: "AppleNext Backend API 🚀",
     status: "running",
     version: "1.0.0",
     timestamp: new Date().toISOString(),
@@ -143,6 +152,38 @@ router.get("/", (req, res) => {
       incentiveLogs: "/api/incentive-logs",
       colors: "/api/colors",
     }
+  });
+});
+
+/**
+ * GET /api/health
+ * Quick diagnosis endpoint — tells you whether the API process is alive and
+ * whether it can actually reach MySQL. If every route is returning 500, open
+ * this first: it names the real error instead of a generic "Server error".
+ */
+router.get("/api/health", async (req, res) => {
+  await checkDbConnection({ quiet: true });
+
+  const healthy = dbStatus.connected;
+  return res.status(healthy ? 200 : 503).json({
+    success: healthy,
+    message: healthy
+      ? "API and database are up"
+      : "API is up but the database is unreachable — every data route will fail until this is fixed",
+    data: {
+      server: "up",
+      uptimeSeconds: Math.round(process.uptime()),
+      environment: NODE_ENV,
+      port: PORT,
+      database: {
+        connected: dbStatus.connected,
+        name: dbStatus.database,
+        host: dbStatus.host,
+        user: dbStatus.user,
+        lastError: dbStatus.lastError,
+        lastCheckedAt: dbStatus.lastCheckedAt,
+      },
+    },
   });
 });
 
@@ -176,6 +217,8 @@ router.use("/api/customer/wishlist", customerWishlistRouter);
 router.use("/api/customer/cart",     customerCartRouter);
 router.use("/api/customer/profile",  customerProfileRouter);
 router.use("/api/customer/orders",   customerOrdersRouter);
+router.use("/api/customer/payments", customerPaymentsRouter);
+router.use("/api/contact",           contactRouter);
 
 router.use('/api/stock', stockRoutes);
 
@@ -217,6 +260,7 @@ const server = app.listen(PORT, () => {
   console.log(` Server running on http://localhost:${PORT}`);
   console.log(` Environment: ${NODE_ENV}`);
   console.log(` Frontend: ${FRONTEND_URL}`);
+  console.log(` Health check: http://localhost:${PORT}/api/health`);
   console.log('='.repeat(50));
 
   // Start the live-stock sync scheduler (no-op unless STOCK_SYNC_ENABLED=true)

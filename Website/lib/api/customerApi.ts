@@ -513,7 +513,14 @@ export interface CustomerOrderItem {
 export interface CustomerOrder {
   id: string;
   orderNumber: string;
-  status: "processing" | "shipped" | "delivered" | "cancelled" | "returned";
+  status:
+    | "pending_payment"
+    | "payment_failed"
+    | "processing"
+    | "shipped"
+    | "delivered"
+    | "cancelled"
+    | "returned";
   statusLabel: string;
   placedAt: string;
   updatedAt?: string | null;
@@ -521,6 +528,12 @@ export interface CustomerOrder {
   paymentMethod: string;
   paymentDetail?: string | null;
   paymentStatus: "pending" | "paid" | "failed" | "refunded";
+  paymentProvider?: string | null;
+  providerOrderId?: string | null;
+  providerPaymentId?: string | null;
+  paymentError?: string | null;
+  paidAt?: string | null;
+  requiresPayment?: boolean;
   deliveryType: string;
   deliveryLabel?: string | null;
   couponCode?: string | null;
@@ -578,6 +591,63 @@ export interface PlaceOrderPayload {
   couponCode?: string | null;
   notes?: string | null;
 }
+
+export interface PaymentConfig {
+  provider: "razorpay";
+  enabled: boolean;
+  keyId: string | null;
+  mode: "test" | "live";
+}
+
+export interface RazorpayOrderSession {
+  keyId: string;
+  mode: "test" | "live";
+  razorpayOrderId: string;
+  amount: number;   // paise
+  currency: string;
+  orderId: string;
+  orderNumber: string;
+  reused: boolean;
+}
+
+export const customerPaymentAPI = {
+  /** Public — tells the storefront whether online payment is available. */
+  getConfig: () => apiFetch<PaymentConfig>(`${BASE}/payments/config`),
+
+  createRazorpayOrder: (orderId: string | number) =>
+    apiFetch<RazorpayOrderSession>(`${BASE}/payments/razorpay/order`, {
+      method: "POST",
+      body: JSON.stringify({ orderId }),
+    }),
+
+  verifyRazorpayPayment: (payload: {
+    orderId: string | number;
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }) =>
+    apiFetch<{
+      orderId: string;
+      orderNumber: string;
+      paymentId: string;
+      alreadyPaid: boolean;
+      status: string;
+      paymentStatus: string;
+    }>(`${BASE}/payments/razorpay/verify`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  reportRazorpayFailure: (payload: {
+    orderId: string | number;
+    reason?: string;
+    razorpay_payment_id?: string;
+  }) =>
+    apiFetch(`${BASE}/payments/razorpay/failed`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+};
 
 export const customerOrderAPI = {
   getAll: () => apiFetch<CustomerOrder[]>(`${BASE}/orders`),

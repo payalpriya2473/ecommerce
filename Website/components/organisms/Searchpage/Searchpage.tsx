@@ -1243,7 +1243,7 @@ export default function SearchPage() {
       <footer className="srp-footer">
         <div className="srp-footer-inner">
           <div className="srp-fb-brand">
-            <div className="srp-fb-logo">MOTABHAI</div>
+            <div className="srp-fb-logo">APPLENEXT</div>
             <p>
               Your one-stop destination for the latest electronics, mobile phones, laptops,
               and home appliances at the best prices with genuine warranty.
@@ -1261,7 +1261,7 @@ export default function SearchPage() {
           ))}
         </div>
         <div className="srp-footer-bottom">
-          <p>&copy; 2026 Motabhai Electronics. All rights reserved.</p>
+          <p>&copy; 2026 AppleNext Electronics. All rights reserved.</p>
           <div className="srp-pay-tags">
             {["Visa", "Mastercard", "UPI", "Net Banking", "EMI"].map((label) => (
               <span key={label}>{label}</span>

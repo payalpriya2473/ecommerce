@@ -154,8 +154,8 @@ export function VariantSelector({ itemId, onSelectionChange }: VariantSelectorPr
       {activePrice > 0 && (
         <div
           style={{
-            background: "#fef2f2",
-            border: "1px solid #fee2e2",
+            background: "var(--brand-tint)",
+            border: "1px solid var(--brand-tint-strong)",
             borderRadius: 14,
             padding: "16px 20px",
           }}
@@ -166,13 +166,13 @@ export function VariantSelector({ itemId, onSelectionChange }: VariantSelectorPr
                 fontFamily: "'Poppins', sans-serif",
                 fontSize: "2.1rem",
                 fontWeight: 800,
-                color: "#dc2626",
+                color: "var(--brand)",
               }}
             >
               {formatPrice(activePrice)}
             </span>
             {activeMrp > activePrice && (
-              <span style={{ fontSize: "1rem", color: "#94a3b8", textDecoration: "line-through" }}>
+              <span style={{ fontSize: "1rem", color: "var(--text-muted)", textDecoration: "line-through" }}>
                 {formatPrice(activeMrp)}
               </span>
             )}
@@ -181,8 +181,8 @@ export function VariantSelector({ itemId, onSelectionChange }: VariantSelectorPr
                 style={{
                   padding: "3px 12px",
                   borderRadius: 50,
-                  background: "#16a34a",
-                  color: "#fff",
+                  background: "var(--success)",
+                  color: "var(--on-accent)",
                   fontSize: "0.78rem",
                   fontWeight: 700,
                 }}
@@ -191,7 +191,7 @@ export function VariantSelector({ itemId, onSelectionChange }: VariantSelectorPr
               </span>
             )}
           </div>
-          <p style={{ fontSize: "0.74rem", color: "#64748b", marginTop: 4 }}>
+          <p style={{ fontSize: "0.74rem", color: "var(--text-secondary)", marginTop: 4 }}>
             Inclusive of all taxes
           </p>
           {activePrice > 0 && (
@@ -202,18 +202,18 @@ export function VariantSelector({ itemId, onSelectionChange }: VariantSelectorPr
                 gap: 8,
                 marginTop: 10,
                 padding: "7px 13px",
-                background: "#fff",
+                background: "var(--surface)",
                 borderRadius: 8,
                 fontSize: "0.8rem",
-                color: "#1e293b",
-                border: "1px solid #e2e8f0",
+                color: "var(--ink-soft)",
+                border: "1px solid var(--border)",
               }}
             >
               💳 EMI from{" "}
-              <strong style={{ color: "#dc2626" }}>
+              <strong style={{ color: "var(--brand)" }}>
                 {formatPrice(Math.round(activePrice / 24))}/month
               </strong>
-              <a href="#" style={{ color: "#2563eb", fontWeight: 600, marginLeft: 6 }}>
+              <a href="#" style={{ color: "var(--info)", fontWeight: 600, marginLeft: 6 }}>
                 View Plans
               </a>
             </div>
@@ -227,7 +227,7 @@ export function VariantSelector({ itemId, onSelectionChange }: VariantSelectorPr
           style={{
             fontSize: "0.85rem",
             fontWeight: 700,
-            color: "#1e293b",
+            color: "var(--ink-soft)",
           }}
         >
           Storage / Variant
@@ -243,9 +243,9 @@ export function VariantSelector({ itemId, onSelectionChange }: VariantSelectorPr
                 style={{
                   padding: "8px 18px",
                   borderRadius: 10,
-                  border: selected ? "2px solid #dc2626" : "2px solid #e2e8f0",
-                  background: selected ? "#fef2f2" : "#fff",
-                  color: selected ? "#dc2626" : "#475569",
+                  border: selected ? "2px solid var(--brand)" : "2px solid #e2e8f0",
+                  background: selected ? "var(--brand-tint)" : "var(--surface)",
+                  color: selected ? "var(--brand)" : "var(--text-body)",
                   fontWeight: selected ? 700 : 500,
                   fontSize: "0.85rem",
                   cursor: "pointer",
@@ -258,7 +258,7 @@ export function VariantSelector({ itemId, onSelectionChange }: VariantSelectorPr
                   style={{
                     display: "block",
                     fontSize: "0.7rem",
-                    color: selected ? "#dc2626" : "#94a3b8",
+                    color: selected ? "var(--brand)" : "var(--text-muted)",
                     fontWeight: 500,
                     marginTop: 1,
                   }}
@@ -274,9 +274,9 @@ export function VariantSelector({ itemId, onSelectionChange }: VariantSelectorPr
       {/* ── Color Selector ────────────────────────────────────── */}
       {availableColors.length > 0 && (
         <div className="space-y-2">
-          <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "#1e293b" }}>
+          <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--ink-soft)" }}>
             Color:{" "}
-            <span style={{ fontWeight: 400, color: "#64748b" }}>
+            <span style={{ fontWeight: 400, color: "var(--text-secondary)" }}>
               {selectedColor?.colorName || ""}
             </span>
           </p>
@@ -323,8 +323,8 @@ export function VariantSelector({ itemId, onSelectionChange }: VariantSelectorPr
                     padding: "4px 12px",
                     borderRadius: 50,
                     border: selected ? "1.5px solid #dc2626" : "1.5px solid #e2e8f0",
-                    background: selected ? "#fef2f2" : "#f8fafc",
-                    color: selected ? "#dc2626" : "#475569",
+                    background: selected ? "var(--brand-tint)" : "var(--bg)",
+                    color: selected ? "var(--brand)" : "var(--text-body)",
                     fontSize: "0.75rem",
                     fontWeight: selected ? 700 : 400,
                     cursor: "pointer",

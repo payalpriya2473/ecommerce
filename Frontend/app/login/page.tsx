@@ -149,8 +149,8 @@ export default function LoginPage() {
           <div className="flex justify-center mb-4">
             <div className="h-16 w-16 overflow-hidden rounded-full border bg-white shadow-sm">
               <Image
-                src="/motabhai_log.jpeg"
-                alt="Motabhai"
+                src="/applenext_icon.png"
+                alt="AppleNext"
                 width={64}
                 height={64}
                 className="h-full w-full object-cover"
@@ -159,7 +159,7 @@ export default function LoginPage() {
             </div>
           </div>
           <CardTitle className="text-2xl">
-            {isSuperAdminLogin ? "Motabhai Enterprise Suite - Super Admin" : "Motabhai Enterprise Suite"}
+            {isSuperAdminLogin ? "AppleNext Enterprise Suite - Super Admin" : "AppleNext Enterprise Suite"}
           </CardTitle>
           <CardDescription>
             {isSuperAdminLogin ? "System administrator access" : "Access your company dashboard"}

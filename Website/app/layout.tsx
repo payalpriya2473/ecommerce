@@ -3,9 +3,10 @@ import { Suspense, type CSSProperties, type ReactNode } from "react";
 import "./globals.css";
 import Providers from "./providers";
 import StorefrontHeader from "@/components/layout/StorefrontHeader";
+import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme/theme-context";
 
 export const metadata: Metadata = {
-  title: "Motabhai Electronics",
+  title: "AppleNext Electronics",
   description: "A modern electronics storefront built with Next.js and React.",
 };
 
@@ -18,6 +19,7 @@ export default function RootLayout({
     <html
       lang="en"
       className="h-full antialiased"
+      suppressHydrationWarning
       style={
         {
           "--font-inter":
@@ -28,6 +30,8 @@ export default function RootLayout({
       }
     >
       <head>
+        {/* Applies the saved / system theme before first paint — no flash. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
         <link
           rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"

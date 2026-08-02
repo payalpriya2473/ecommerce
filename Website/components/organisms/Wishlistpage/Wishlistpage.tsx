@@ -108,7 +108,7 @@ export default function WishlistPage() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareUrl] = useState(() =>
-    typeof window === "undefined" ? "https://motabhai.in/wishlist" : `${window.location.origin}/wishlist`
+    typeof window === "undefined" ? "https://applenext.in/wishlist" : `${window.location.origin}/wishlist`
   );
   const toastIdRef = useRef(0);
 
@@ -277,12 +277,12 @@ export default function WishlistPage() {
 
   function shareVia(platform: string) {
     const url = encodeURIComponent(shareUrl);
-    const text = encodeURIComponent("Check out my Motabhai wishlist!");
+    const text = encodeURIComponent("Check out my AppleNext wishlist!");
     const platformUrls: Record<string, string> = {
       whatsapp: `https://wa.me/?text=${text}%20${url}`,
       facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}`,
       twitter: `https://twitter.com/intent/tweet?url=${url}&text=${text}`,
-      email: `mailto:?subject=My Motabhai Wishlist&body=${text} ${url}`,
+      email: `mailto:?subject=My AppleNext Wishlist&body=${text} ${url}`,
     };
 
     if (platformUrls[platform]) {
@@ -440,7 +440,7 @@ export default function WishlistPage() {
       <footer className="footer">
         <div className="footer-top">
           <div>
-            <div className="footer-logo">MOTABHAI</div>
+            <div className="footer-logo">APPLENEXT</div>
             <p className="footer-desc">
               Your one-stop destination for the latest electronics, mobile phones, laptops, and
               home appliances at the best prices with genuine warranty.
@@ -587,7 +587,7 @@ function WishlistCard({
       </div>
 
       <div className="wl-card-body">
-        <div className="wl-brand">{item.brandName || "Motabhai"}</div>
+        <div className="wl-brand">{item.brandName || "AppleNext"}</div>
         <div className="wl-name">
           <Link href={productHref}>{item.itemName}</Link>
         </div>
