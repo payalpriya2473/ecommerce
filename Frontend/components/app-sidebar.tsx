@@ -172,11 +172,6 @@ export function AppSidebar({
       icon: LayoutDashboard,
     },
     {
-      title: "Live Stock",
-      href: "/live-stock",
-      icon: Package2,
-    },
-    {
       title: "Master Data",
       icon: Briefcase,
       children: [

@@ -31,9 +31,7 @@ import customerOrdersRouter  from "./routes/customerOrders.js";
 import contactRouter         from "./routes/contactRoutes.js";
 import customerPaymentsRouter from "./routes/customerPayments.js";
 import razorpayWebhookRouter from "./routes/razorpayWebhook.js";
-import stockRoutes from './routes/stockRoutes.js';
 import emailConfigRoutes from './routes/emailConfigRoutes.js';
-import { startStockSyncCron } from './cron/syncStockCron.js';
 import { checkDbConnection, dbStatus } from './config/db.js';
 
 
@@ -220,8 +218,6 @@ router.use("/api/customer/orders",   customerOrdersRouter);
 router.use("/api/customer/payments", customerPaymentsRouter);
 router.use("/api/contact",           contactRouter);
 
-router.use('/api/stock', stockRoutes);
-
 
 
 // Mount the router to both root and subdirectory
@@ -262,9 +258,6 @@ const server = app.listen(PORT, () => {
   console.log(` Frontend: ${FRONTEND_URL}`);
   console.log(` Health check: http://localhost:${PORT}/api/health`);
   console.log('='.repeat(50));
-
-  // Start the live-stock sync scheduler (no-op unless STOCK_SYNC_ENABLED=true)
-  startStockSyncCron();
 });
 
 server.on("error", (err) => {
