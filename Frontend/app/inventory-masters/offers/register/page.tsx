@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AuthGuard } from "@/components/auth-guard"
 import { AuthenticatedLayout } from "@/components/authenticated-layout"
-import { Tag, ArrowLeft } from "lucide-react"
+import { Tag, ArrowLeft, Loader2 } from "lucide-react"
 import { itemAPI, offerAPI, brandAPI } from "@/lib/api"
 import {
   OfferFormFields, EMPTY_OFFER_FORM, buildOfferPayload, offersListRouteForSection,
@@ -36,7 +36,7 @@ function toBrandOption(raw: any): BrandOption {
 
 const VALID_SECTIONS = ["flash_sale", "home_best", "bank_offer", "brand_deal", "coupon", "combo", "clearance", "exchange_offer"]
 
-export default function OfferRegisterPage() {
+function OfferRegisterContent() {
   const router = useRouter()
   const params = useSearchParams()
   const presetSection = params.get("section") || ""
@@ -104,42 +104,57 @@ export default function OfferRegisterPage() {
   }
 
   return (
+    <div className="py-8 px-4">
+      <div className="w-full">
+        <Button variant="ghost" onClick={() => router.push(offersListRouteForSection(values.section))}
+          className="mb-4 bg-red-700 text-white hover:bg-red-800">
+          <ArrowLeft className="h-4 w-4 mr-2" /> Back
+        </Button>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-accent to-accent-secondary flex items-center justify-center flex-shrink-0">
+                <Tag className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <CardTitle className="text-2xl">Add Offer</CardTitle>
+                
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <OfferFormFields
+              values={values}
+              onChange={(patch) => setValues((prev) => ({ ...prev, ...patch }))}
+              onSubmit={handleSubmit}
+              onCancel={() => router.push(offersListRouteForSection(values.section))}
+              error={error}
+              isSubmitting={isSubmitting}
+              mode="add"
+              items={items}
+              brands={brands}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+export default function OfferRegisterPage() {
+  return (
     <AuthGuard>
       <AuthenticatedLayout>
-        <div className="py-8 px-4">
-          <div className="w-full">
-            <Button variant="ghost" onClick={() => router.push(offersListRouteForSection(values.section))}
-              className="mb-4 bg-red-700 text-white hover:bg-red-800">
-              <ArrowLeft className="h-4 w-4 mr-2" /> Back
-            </Button>
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-accent to-accent-secondary flex items-center justify-center flex-shrink-0">
-                    <Tag className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-2xl">Add Offer</CardTitle>
-                    
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <OfferFormFields
-                  values={values}
-                  onChange={(patch) => setValues((prev) => ({ ...prev, ...patch }))}
-                  onSubmit={handleSubmit}
-                  onCancel={() => router.push(offersListRouteForSection(values.section))}
-                  error={error}
-                  isSubmitting={isSubmitting}
-                  mode="add"
-                  items={items}
-                  brands={brands}
-                />
-              </CardContent>
-            </Card>
+        <Suspense fallback={
+          <div className="flex items-center justify-center min-h-[50vh]">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading...</p>
+            </div>
           </div>
-        </div>
+        }>
+          <OfferRegisterContent />
+        </Suspense>
       </AuthenticatedLayout>
     </AuthGuard>
   )

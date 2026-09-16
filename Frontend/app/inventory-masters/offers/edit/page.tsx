@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AuthGuard } from "@/components/auth-guard"
 import { AuthenticatedLayout } from "@/components/authenticated-layout"
-import { Tag, ArrowLeft } from "lucide-react"
+import { Tag, ArrowLeft, Loader2 } from "lucide-react"
 import { itemAPI, offerAPI, brandAPI, type OfferSection } from "@/lib/api"
 import {
   OfferFormFields, EMPTY_OFFER_FORM, buildOfferPayload, offersListRouteForSection,
@@ -43,7 +43,7 @@ function toLocalInput(v?: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export default function OfferEditPage() {
+function OfferEditContent() {
   const router = useRouter()
   const params = useSearchParams()
   const id = params.get("id") || ""
@@ -171,48 +171,63 @@ export default function OfferEditPage() {
   }
 
   return (
+    <div className="py-8 px-4">
+      <div className="w-full">
+        <Button variant="ghost" onClick={() => router.push(offersListRouteForSection(values.section))}
+          className="mb-4 bg-red-700 text-white hover:bg-red-800">
+          <ArrowLeft className="h-4 w-4 mr-2" /> Back
+        </Button>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-accent to-accent-secondary flex items-center justify-center flex-shrink-0">
+                <Tag className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <CardTitle className="text-2xl">{isView ? "View Offer" : "Edit Offer"}</CardTitle>
+                <CardDescription>
+                  {isView ? "Read-only view of this offer's details" : "Update discount, schedule, and display settings"}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="py-16 text-center text-muted-foreground">Loading offer...</div>
+            ) : (
+              <OfferFormFields
+                values={values}
+                onChange={(patch) => setValues((prev) => ({ ...prev, ...patch }))}
+                onSubmit={handleSubmit}
+                onCancel={() => router.push(offersListRouteForSection(values.section))}
+                error={error}
+                isSubmitting={isSubmitting}
+                mode={isView ? "view" : "edit"}
+                items={items}
+                brands={brands}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+export default function OfferEditPage() {
+  return (
     <AuthGuard>
       <AuthenticatedLayout>
-        <div className="py-8 px-4">
-          <div className="w-full">
-            <Button variant="ghost" onClick={() => router.push(offersListRouteForSection(values.section))}
-              className="mb-4 bg-red-700 text-white hover:bg-red-800">
-              <ArrowLeft className="h-4 w-4 mr-2" /> Back
-            </Button>
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-accent to-accent-secondary flex items-center justify-center flex-shrink-0">
-                    <Tag className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-2xl">{isView ? "View Offer" : "Edit Offer"}</CardTitle>
-                    <CardDescription>
-                      {isView ? "Read-only view of this offer's details" : "Update discount, schedule, and display settings"}
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="py-16 text-center text-muted-foreground">Loading offer...</div>
-                ) : (
-                  <OfferFormFields
-                    values={values}
-                    onChange={(patch) => setValues((prev) => ({ ...prev, ...patch }))}
-                    onSubmit={handleSubmit}
-                    onCancel={() => router.push(offersListRouteForSection(values.section))}
-                    error={error}
-                    isSubmitting={isSubmitting}
-                    mode={isView ? "view" : "edit"}
-                    items={items}
-                    brands={brands}
-                  />
-                )}
-              </CardContent>
-            </Card>
+        <Suspense fallback={
+          <div className="flex items-center justify-center min-h-[50vh]">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading...</p>
+            </div>
           </div>
-        </div>
+        }>
+          <OfferEditContent />
+        </Suspense>
       </AuthenticatedLayout>
     </AuthGuard>
   )
