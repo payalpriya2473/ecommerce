@@ -43,7 +43,6 @@ const DEFAULT_PORT = 5001;
 const PORT = Number(process.env.PORT) || DEFAULT_PORT;
 const NODE_ENV = process.env.NODE_ENV || "development";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
-const FRONTEND_URLS = process.env.FRONTEND_URLS || "";
 
 function normalizeOrigin(value) {
   return value.trim().replace(/\/+$/, "");
@@ -76,9 +75,8 @@ function expandOriginVariants(origin) {
 const allowedOrigins = new Set(
   [
     FRONTEND_URL,
-    ...FRONTEND_URLS.split(","),
     "http://localhost:3000",
-    "https://shop.applenext.in"
+    "https://shop.applenext.in/"
   ]
     .flatMap(expandOriginVariants)
     .filter(Boolean)
