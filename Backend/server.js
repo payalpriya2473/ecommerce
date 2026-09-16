@@ -78,17 +78,7 @@ const allowedOrigins = new Set(
     FRONTEND_URL,
     ...FRONTEND_URLS.split(","),
     "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:3002",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
-    "http://127.0.0.1:3002",
-    "http://app.motabhai.abspldev.com",
-    "https://app.motabhai.abspldev.com",
-    "http://motabhai.abspldev.com",
-    "https://motabhai.abspldev.com",
-    "http://www.motabhai.abspldev.com",
-    "https://www.motabhai.abspldev.com",
+    "https://shop.applenext.in"
   ]
     .flatMap(expandOriginVariants)
     .filter(Boolean)
