@@ -22,7 +22,6 @@ if (process.cwd() !== projectRoot) {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // output: 'export',
-  basePath: '/admin',
   outputFileTracingRoot: projectRoot,
   typescript: {
     ignoreBuildErrors: true,

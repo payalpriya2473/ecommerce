@@ -1,5 +1,18 @@
 import { db } from '../config/db.js';
 
+function parseBooleanLike(value, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  return !['false', '0', 'no', 'off'].includes(String(value).trim().toLowerCase());
+}
+
+function parseNumberLike(value, fallback = 0) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 /**
  * Register a new company
  */
@@ -42,8 +55,8 @@ export const registerCompany = async (req, res) => {
         gstNumber.toUpperCase(), panNumber.toUpperCase(),
         bankName, accountNumber, ifscCode.toUpperCase(), bankBranch,
         upiId || null, qrCodeData || null, logoUrl, udid || null,
-        msmeRegistered || false, msmeNumber || null, msmeCategory || null, msmeType || null,
-        tdsApplicable || false, tanNumber || null, tdsRate || 0,
+        parseBooleanLike(msmeRegistered) ? 1 : 0, msmeNumber || null, msmeCategory || null, msmeType || null,
+        parseBooleanLike(tdsApplicable) ? 1 : 0, tanNumber || null, parseNumberLike(tdsRate),
         dispatchName || null, dispatchContactPerson || null, dispatchContactPhone || null,
       ]
     );
@@ -238,7 +251,13 @@ export const updateCompany = async (req, res) => {
     for (const field of allowedFields) {
       if (updateData[field] !== undefined) {
         updateFields.push(`${field} = ?`);
-        updateValues.push(updateData[field]);
+        if (field === 'msmeRegistered' || field === 'tdsApplicable' || field === 'isActive') {
+          updateValues.push(parseBooleanLike(updateData[field]) ? 1 : 0);
+        } else if (field === 'tdsRate') {
+          updateValues.push(parseNumberLike(updateData[field]));
+        } else {
+          updateValues.push(updateData[field]);
+        }
       }
     }
 

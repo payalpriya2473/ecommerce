@@ -395,10 +395,10 @@ export default function StorefrontHeader() {
               type="button"
               className="sf-theme-toggle"
               onClick={toggleTheme}
-              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-              title={theme === "dark" ? "Light mode" : "Dark mode"}
+              aria-label={themeReady ? (theme === "dark" ? "Switch to light theme" : "Switch to dark theme") : "Change theme"}
+              title={themeReady ? (theme === "dark" ? "Light mode" : "Dark mode") : "Change theme"}
             >
-              <i className={`fas ${themeReady && theme === "dark" ? "fa-moon" : "fa-sun"}`} />
+              <i className={`fas ${themeReady && theme === "dark" ? "fa-moon" : "fa-sun"}`} aria-hidden="true" />
             </button>
 
             {headerActions.map((item) => {

@@ -76,6 +76,7 @@ const allowedOrigins = new Set(
   [
     FRONTEND_URL,
     "http://localhost:3000",
+    "http://localhost:3001",
     "https://shop.applenext.in/"
   ]
     .flatMap(expandOriginVariants)
