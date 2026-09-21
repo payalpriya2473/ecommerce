@@ -39,7 +39,7 @@ dotenv.config();
 
 const app = express();
 const router = express.Router();
-const DEFAULT_PORT = 5001;
+const DEFAULT_PORT = 5000;
 const PORT = Number(process.env.PORT) || DEFAULT_PORT;
 const NODE_ENV = process.env.NODE_ENV || "development";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
@@ -76,7 +76,6 @@ const allowedOrigins = new Set(
   [
     FRONTEND_URL,
     "http://localhost:3000",
-    "http://localhost:3001",
     "https://shop.applenext.in/"
   ]
     .flatMap(expandOriginVariants)
