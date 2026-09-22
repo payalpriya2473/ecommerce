@@ -9,7 +9,7 @@ import {
 
 const BASE = CUSTOMER_API_PROXY_BASE;
 
-export const CUSTOMER_AUTH_EVENT = "motabhai:customer-auth-change";
+export const CUSTOMER_AUTH_EVENT = "applenext:customer-auth-change";
 
 // ─── Token + session helpers ────────────────────────────────────────────────
 

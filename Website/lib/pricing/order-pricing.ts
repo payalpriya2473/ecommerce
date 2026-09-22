@@ -60,7 +60,7 @@ export const COD_FEE = 29;
 export const COD_FEE_THRESHOLD = 1000;
 export const GST_RATE = 0.018;
 
-const CHECKOUT_COUPON_KEY = "motabhai-checkout:coupon";
+const CHECKOUT_COUPON_KEY = "applenext-checkout:coupon";
 
 export function toAmount(value: unknown): number {
   const parsed = Number(value);

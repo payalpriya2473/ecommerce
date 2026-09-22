@@ -1,4 +1,3 @@
-// export const API_BASE_URL = 'https://uniqueconsultancy.in/motabhai_next_backend/api';
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
 
 const AUTH_ERROR_MESSAGES = [

@@ -135,7 +135,7 @@ function TechnicianEditContent() {
 
       const res = await technicianAPI.update(techId, data, token);
       if (res.success) {
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api";
+      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api";
         for (const doc of newDocs) {
           const docForm = new FormData();
           docForm.append("document", doc.file);

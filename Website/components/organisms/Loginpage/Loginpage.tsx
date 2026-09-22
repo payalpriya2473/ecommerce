@@ -75,7 +75,7 @@ async function syncAfterLogin(accessToken: string) {
   };
 
   try {
-    const wishlistItems = readItems(["motabhai-wishlist:guest", "motabhai-wishlist"]);
+    const wishlistItems = readItems(["applenext-wishlist:guest", "applenext-wishlist"]);
     if (wishlistItems.length > 0) {
       await fetch(`${BASE}/wishlist/sync`, {
         method: "POST", headers,
@@ -85,7 +85,7 @@ async function syncAfterLogin(accessToken: string) {
   } catch { /* ignore */ }
 
   try {
-    const cartItems = readItems(["motabhai-cart:guest", "motabhai-cart"]);
+    const cartItems = readItems(["applenext-cart:guest", "applenext-cart"]);
     if (cartItems.length > 0) {
       await fetch(`${BASE}/cart/sync`, {
         method: "POST", headers,

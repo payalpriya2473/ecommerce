@@ -12,9 +12,9 @@ import {
   type CustomerWishlistItem,
 } from "@/lib/api/customerApi";
 
-const WISHLIST_GUEST_KEY = "motabhai-wishlist:guest";
-const WISHLIST_LEGACY_KEY = "motabhai-wishlist";
-const WISHLIST_CUSTOMER_PREFIX = "motabhai-wishlist:customer:";
+const WISHLIST_GUEST_KEY = "applenext-wishlist:guest";
+const WISHLIST_LEGACY_KEY = "applenext-wishlist";
+const WISHLIST_CUSTOMER_PREFIX = "applenext-wishlist:customer:";
 
 export interface WishlistItem {
   id: string;

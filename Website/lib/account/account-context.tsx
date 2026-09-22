@@ -11,9 +11,9 @@ import {
   type CustomerProfile,
 } from "@/lib/api/customerApi";
 
-const ACCOUNT_GUEST_KEY = "motabhai-account:guest";
-const ACCOUNT_LEGACY_KEY = "motabhai-account";
-const ACCOUNT_CUSTOMER_PREFIX = "motabhai-account:customer:";
+const ACCOUNT_GUEST_KEY = "applenext-account:guest";
+const ACCOUNT_LEGACY_KEY = "applenext-account";
+const ACCOUNT_CUSTOMER_PREFIX = "applenext-account:customer:";
 
 export type AccountPanelSettingKey =
   | "orderUpdates"

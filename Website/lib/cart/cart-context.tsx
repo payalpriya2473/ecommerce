@@ -10,12 +10,12 @@ import {
   type CustomerCartItem,
 } from "@/lib/api/customerApi";
 
-const CART_GUEST_KEY = "motabhai-cart:guest";
-const CART_LEGACY_KEY = "motabhai-cart";
-const CART_CUSTOMER_PREFIX = "motabhai-cart:customer:";
-const SAVED_GUEST_KEY = "motabhai-cart-saved:guest";
-const SAVED_LEGACY_KEY = "motabhai-cart-saved";
-const SAVED_CUSTOMER_PREFIX = "motabhai-cart-saved:customer:";
+const CART_GUEST_KEY = "applenext-cart:guest";
+const CART_LEGACY_KEY = "applenext-cart";
+const CART_CUSTOMER_PREFIX = "applenext-cart:customer:";
+const SAVED_GUEST_KEY = "applenext-cart-saved:guest";
+const SAVED_LEGACY_KEY = "applenext-cart-saved";
+const SAVED_CUSTOMER_PREFIX = "applenext-cart-saved:customer:";
 
 export interface CartItem {
   id: string;
