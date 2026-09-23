@@ -7,7 +7,6 @@ import {
   footerGroups,
 } from "@/lib/data/homePageData";
 import {
-  COMPANY_ID,
   Category,
   Item,
   getCategoryUrl,
@@ -177,7 +176,6 @@ export default function SearchPage() {
 
       try {
         const fetchedCategories = await publicCategoryAPI.getAll({
-          companyId: COMPANY_ID || undefined,
           showOnWebsite: true,
         });
 
@@ -187,7 +185,6 @@ export default function SearchPage() {
         const categoryMatch   = trimmedQuery ? resolveCategoryQuery(trimmedQuery, fetchedCategories) : null;
 
         const itemsResponse = await publicItemAPI.getAll({
-          companyId:  COMPANY_ID || undefined,
           categoryId: categoryMatch?.id,
           search:     categoryMatch ? undefined : trimmedQuery || undefined,
           page:  1,

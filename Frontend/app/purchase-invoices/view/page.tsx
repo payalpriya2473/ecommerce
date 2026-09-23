@@ -12,7 +12,7 @@ import {
   CreditCard, AlertCircle, Calendar, User, MapPin, Barcode,
 } from "lucide-react"
 import Link from "next/link"
-import { purchaseInvoiceAPI, branchAPI, purchaseOrderAPI } from "@/lib/api"
+import { purchaseInvoiceAPI, purchaseOrderAPI } from "@/lib/api"
 import { PermissionGate } from "@/components/PermissionGate"
 
 const toNumber = (value: unknown) => Number(value) || 0
@@ -139,7 +139,6 @@ function PurchaseInvoiceViewContent() {
   const piId = searchParams.get("id") || ""
 
   const [pi, setPI] = useState<any>(null)
-  const [branchName, setBranchName] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [linkedPOItems, setLinkedPOItems] = useState<{ itemId: string; qty: number; rate: number }[]>([])
 
@@ -178,15 +177,6 @@ function PurchaseInvoiceViewContent() {
               }))
             )
           }
-        }
-
-        if (invoice.branchId) {
-          const branchRes = await branchAPI.getById(token, invoice.branchId)
-          setBranchName(
-            branchRes.success && branchRes.data?.name ? branchRes.data.name : invoice.branchName || ""
-          )
-        } else {
-          setBranchName(invoice.branchName || "")
         }
       }
     } catch (err) {
@@ -411,12 +401,6 @@ function PurchaseInvoiceViewContent() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">L.R. Date:</span>
                     <span className="font-medium">{formatDate(pi.lrDate)}</span>
-                  </div>
-                )}
-                {branchName && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Branch:</span>
-                    <span className="font-medium">{branchName}</span>
                   </div>
                 )}
                 {pi.remarks && (

@@ -95,22 +95,14 @@ async function getPublicColorsForItem(itemId) {
 
 router.get("/categories", async (req, res) => {
   try {
-    const { companyId, showOnWebsite } = req.query;
+    const { showOnWebsite } = req.query;
 
     let sql = `
-      SELECT
-        c.*,
-        co.name AS companyName
+      SELECT c.*
       FROM categories c
-      LEFT JOIN companies co ON co.id = c.companyId
       WHERE c.isActive = 1
     `;
     const params = [];
-
-    if (companyId) {
-      sql += " AND (c.companyId = ? OR c.companyId IS NULL)";
-      params.push(companyId);
-    }
 
     if (showOnWebsite === "true") {
       sql += " AND c.show_on_website = 1";
@@ -128,9 +120,8 @@ router.get("/categories", async (req, res) => {
 router.get("/categories/:id", async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT c.*, co.name AS companyName
+      `SELECT c.*
        FROM categories c
-       LEFT JOIN companies co ON co.id = c.companyId
        WHERE c.id = ? AND c.isActive = 1`,
       [req.params.id]
     );
@@ -147,20 +138,12 @@ router.get("/categories/:id", async (req, res) => {
 
 router.get("/brands", async (req, res) => {
   try {
-    const { companyId } = req.query;
-
     let sql = `
-      SELECT b.*, co.name AS companyName
+      SELECT b.*
       FROM brands b
-      LEFT JOIN companies co ON co.id = b.companyId
       WHERE b.isActive = 1
     `;
     const params = [];
-
-    if (companyId) {
-      sql += " AND (b.companyId = ? OR b.companyId IS NULL)";
-      params.push(companyId);
-    }
 
     sql += " ORDER BY b.name ASC";
 
@@ -174,9 +157,8 @@ router.get("/brands", async (req, res) => {
 router.get("/brands/:id", async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT b.*, co.name AS companyName
+      `SELECT b.*
        FROM brands b
-       LEFT JOIN companies co ON co.id = b.companyId
        WHERE b.id = ? AND b.isActive = 1`,
       [req.params.id]
     );
@@ -195,7 +177,6 @@ router.get("/brands/:id", async (req, res) => {
 router.get("/items", async (req, res) => {
   try {
     const {
-      companyId,
       categoryId,
       brandId,
       itemGroupId,
@@ -209,10 +190,6 @@ router.get("/items", async (req, res) => {
     const conditions = ["i.isActive = 1"];
     const params = [];
 
-    if (companyId) {
-      conditions.push("i.companyId = ?");
-      params.push(companyId);
-    }
     if (brandId) {
       conditions.push("i.brandId = ?");
       params.push(brandId);
@@ -260,7 +237,6 @@ router.get("/items", async (req, res) => {
          ig.name  AS itemGroupName,
          cat.name AS categoryName,
          cat.id   AS categoryId,
-         co.name  AS companyName,
          (
            SELECT imageUrl
            FROM item_images
@@ -272,7 +248,6 @@ router.get("/items", async (req, res) => {
        LEFT JOIN item_groups ig  ON ig.id  = i.itemGroupId
        LEFT JOIN categories  cat ON cat.id = ig.categoryId
        LEFT JOIN brands      b   ON b.id   = i.brandId
-       LEFT JOIN companies   co  ON co.id  = i.companyId
        WHERE ${where}
        ORDER BY i.sortOrder ASC, i.itemName ASC
        LIMIT ? OFFSET ?`,
@@ -340,13 +315,11 @@ router.get("/items/:id", async (req, res) => {
          b.name   AS brandName,
          ig.name  AS itemGroupName,
          cat.name AS categoryName,
-         cat.id   AS categoryId,
-         co.name  AS companyName
+         cat.id   AS categoryId
        FROM items i
        LEFT JOIN item_groups ig  ON ig.id  = i.itemGroupId
        LEFT JOIN categories  cat ON cat.id = ig.categoryId
        LEFT JOIN brands      b   ON b.id   = i.brandId
-       LEFT JOIN companies   co  ON co.id  = i.companyId
        WHERE i.id = ? AND i.isActive = 1`,
       [id]
     );
@@ -366,7 +339,7 @@ router.get("/items/:id", async (req, res) => {
     }));
 
     // ── Find all sibling variants (same product family) ───────────────────────
-    // Siblings = same itemName + itemGroupId + brandId + companyId
+    // Siblings = same itemName + itemGroupId + brandId
     const [siblings] = await db.query(
       `SELECT
          i.*,
@@ -381,10 +354,9 @@ router.get("/items/:id", async (req, res) => {
        WHERE i.itemName     = ?
          AND (i.itemGroupId <=> ?)
          AND (i.brandId     <=> ?)
-         AND (i.companyId   <=> ?)
          AND i.isActive = 1
        ORDER BY i.sortOrder ASC, i.id ASC`,
-      [item.itemName, item.itemGroupId, item.brandId, item.companyId]
+      [item.itemName, item.itemGroupId, item.brandId]
     );
 
     // ── For each sibling variant, attach colors + images ──────────────────────
@@ -588,40 +560,38 @@ router.get("/offers", async (req, res) => {
 
 router.get("/search", async (req, res) => {
   try {
-    const { q, companyId, limit = 6 } = req.query;
+    const { q, limit = 6 } = req.query;
 
     if (!q || q.trim().length < 2) {
       return ok(res, { items: [], categories: [], brands: [] });
     }
 
     const like = `%${q}%`;
-    const cond = companyId ? "AND companyId = ?" : "";
-    const cparam = companyId ? [companyId] : [];
 
     const [items] = await db.query(
       `SELECT i.id, i.itemName, i.brandId, b.name AS brandName,
               (SELECT imageUrl FROM item_images WHERE itemId = i.id ORDER BY sortOrder LIMIT 1) AS primaryImage
        FROM items i
        LEFT JOIN brands b ON b.id = i.brandId
-       WHERE i.isActive = 1 ${cond} AND i.itemName LIKE ?
+       WHERE i.isActive = 1 AND i.itemName LIKE ?
        LIMIT ?`,
-      [...cparam, like, Number(limit)]
+      [like, Number(limit)]
     );
 
     const [categories] = await db.query(
       `SELECT id, name,
               COALESCE(categoryImage, category_image) AS categoryImage
        FROM categories
-       WHERE isActive = 1 ${cond} AND name LIKE ?
+       WHERE isActive = 1 AND name LIKE ?
        LIMIT ?`,
-      [...cparam, like, Number(limit)]
+      [like, Number(limit)]
     );
 
     const [brands] = await db.query(
       `SELECT id, name FROM brands
-       WHERE isActive = 1 ${cond} AND name LIKE ?
+       WHERE isActive = 1 AND name LIKE ?
        LIMIT ?`,
-      [...cparam, like, Number(limit)]
+      [like, Number(limit)]
     );
 
     return ok(res, { items, categories, brands });

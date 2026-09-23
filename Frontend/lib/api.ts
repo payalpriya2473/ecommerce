@@ -308,7 +308,6 @@ export interface Supplier {
 
 export interface Category {
   id: string;
-  companyId: string;
   name: string;
   marginPercent: number;
 
@@ -332,7 +331,6 @@ export interface Category {
   parentCategoryId?: string;   
   parent_category_id?: string;
 
-  companyName?: string;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -340,18 +338,15 @@ export interface Category {
 
 export interface Brand {
   id: string;
-  companyId: string;
   name: string;
   iconUrl?: string; 
   isActive: boolean;
-  companyName?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface ItemGroup {
   id: string;
-  companyId: string;
   categoryId?: string;
   name: string;
   combineGroup?: string;
@@ -362,7 +357,6 @@ export interface ItemGroup {
   maxQty: number;
   isActive: boolean;
   categoryName?: string;
-  companyName?: string;
   createdAt?: string;
   updatedAt?: string;
 } 
@@ -389,7 +383,6 @@ export interface ItemVariant {
 
 export interface Item {
   id: string;
-  companyId: string;
   itemGroupId?: string;
   brandId?: string;
   itemName: string;
@@ -420,7 +413,6 @@ export interface Item {
   itemGroupName?: string;
   brandName?: string;
   categoryName?: string;
-  companyName?: string;
  
   // ── Relations (same shape as before) ──
   variants?: ItemVariant[];      // sibling rows returned by API
@@ -481,7 +473,6 @@ export interface PurchaseOrderItem {
 
 export interface PurchaseOrder {
   id: string;
-  companyId: string;
   poNumber: string;
   supplierId: string;
   supplierName?: string;
@@ -612,7 +603,6 @@ export interface PurchaseInvoiceItem {
 
 export interface PurchaseInvoice {
   id: string;
-  companyId: string;
   billNumber?: string;
   billDate: string;
   supplierId: string;
@@ -621,7 +611,6 @@ export interface PurchaseInvoice {
   supplierGST?: string;
   supplierState?: string;
   purchaseOrderId?: string;
-  branchId?: string;
   transporterId?: string;
   lrNumber?: string;
   lrDate?: string;
@@ -648,7 +637,6 @@ export interface PurchaseInvoice {
  
 export interface IncentiveLog {
   id: string;
-  companyId?: string;
   itemId: string;
   itemName?: string;
   brandId?: string;
@@ -687,11 +675,9 @@ export interface ItemDefaults {
   incentive: number;
   margin: number;
   offerPrice: number;
-  companyId?: string;
 }
 export interface Color {
   id: string;
-  companyId?: string;
   brandId: string;
   colorName: string;
   isActive: boolean;
@@ -765,8 +751,6 @@ export interface SalesInvoiceInstallment {
  
 export interface SalesInvoice {
   id?: string;
-  companyId: string;
-  branchId?: string | null;
   billNumber: string;
   billDate: string;
  
@@ -832,7 +816,6 @@ export interface SalesInvoice {
   remarks?: string | null;
  
   // Relations (returned by GET)
-  branchName?: string;
   itemCount?: number;
   items?: SalesInvoiceItemPayload[];
   installments?: SalesInvoiceInstallment[];
@@ -1607,9 +1590,8 @@ export const supplierAPI = {
 
 // Category API 
 export const categoryAPI = {
-  getAll: async (token: string, companyId?: string, options?: ListQueryOptions) => {
+  getAll: async (token: string, options?: ListQueryOptions) => {
     const params = new URLSearchParams();
-    if (companyId) params.append('companyId', companyId);
     appendListQuery(params, options);
     const qs = params.toString();
     const url = qs ? `${API_BASE_URL}/categories?${qs}` : `${API_BASE_URL}/categories`;
@@ -1621,13 +1603,6 @@ export const categoryAPI = {
 
   getById: async (token: string, id: string) => {
     const res = await fetch(`${API_BASE_URL}/categories/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return parseApiResponse(res);
-  },
-
-  getByCompany: async (token: string, companyId: string) => {
-    const res = await fetch(`${API_BASE_URL}/categories/company/${companyId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return parseApiResponse(res);
@@ -1671,9 +1646,8 @@ export const categoryAPI = {
 // ─── Brand API ───────────────────────────────────────────────
 
 export const brandAPI = {
-  getAll: async (token: string, companyId?: string, options?: ListQueryOptions) => {
+  getAll: async (token: string, options?: ListQueryOptions) => {
     const params = new URLSearchParams();
-    if (companyId) params.append('companyId', companyId);
     appendListQuery(params, options);
     const qs = params.toString();
     const url = qs ? `${API_BASE_URL}/brands?${qs}` : `${API_BASE_URL}/brands`;
@@ -1685,13 +1659,6 @@ export const brandAPI = {
 
   getById: async (token: string, id: string) => {
     const res = await fetch(`${API_BASE_URL}/brands/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return parseApiResponse(res);
-  },
-
-  getByCompany: async (token: string, companyId: string) => {
-    const res = await fetch(`${API_BASE_URL}/brands/company/${companyId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return parseApiResponse(res);
@@ -1737,12 +1704,10 @@ register: async (data: Partial<Brand> | FormData, token: string) => {
 export const itemGroupAPI = {
   getAll: async (
     token: string,
-    companyId?: string,
     categoryId?: string,
     options?: ListQueryOptions,
   ) => {
     const params = new URLSearchParams();
-    if (companyId)  params.append('companyId',  companyId);
     if (categoryId) params.append('categoryId', categoryId);
     appendListQuery(params, options);
     const qs = params.toString();
@@ -1755,13 +1720,6 @@ export const itemGroupAPI = {
 
   getById: async (token: string, id: string) => {
     const res = await fetch(`${API_BASE_URL}/item-groups/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return parseApiResponse(res);
-  },
-
-  getByCompany: async (token: string, companyId: string) => {
-    const res = await fetch(`${API_BASE_URL}/item-groups/company/${companyId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return parseApiResponse(res);
@@ -1805,7 +1763,6 @@ export const itemGroupAPI = {
 export const itemAPI = {
   getAll: async (
     token: string,
-    companyId?: string,
     search?: string,
     filters?: {
       statuses?: Array<'active' | 'inactive'>;
@@ -1823,7 +1780,6 @@ export const itemAPI = {
     stockSearch?: string,
   ) => {
     const params = new URLSearchParams();
-    if (companyId) params.append('companyId', companyId);
     if (search)    params.append('search',    search);
     if (stockSearch) params.append('stockSearch', stockSearch);
     if (filters?.statuses?.length) {
@@ -1872,13 +1828,6 @@ export const itemAPI = {
 
   getById: async (token: string, id: string) => {
     const res = await fetch(`${API_BASE_URL}/items/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return parseApiResponse(res);
-  },
-
-  getByCompany: async (token: string, companyId: string) => {
-    const res = await fetch(`${API_BASE_URL}/items/company/${companyId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return parseApiResponse(res);
@@ -2065,10 +2014,8 @@ export const offerAPI = {
 
 // Purchase Order API
 export const PurchaseOrderAPI = {
-  getNextNumber: async (token: string, companyId?: string) => {
-  const url = companyId 
-    ? `${API_BASE_URL}/purchase-orders/next-number?companyId=${companyId}`
-    : `${API_BASE_URL}/purchase-orders/next-number`;
+  getNextNumber: async (token: string) => {
+  const url = `${API_BASE_URL}/purchase-orders/next-number`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -2132,9 +2079,8 @@ export const PurchaseOrderAPI = {
     return res.json();
   },
 
-  getPendingQtyByGroup: async (token: string, companyId?: string, excludePoId?: string) => {
+  getPendingQtyByGroup: async (token: string, excludePoId?: string) => {
     const params = new URLSearchParams();
-    if (companyId) params.append('companyId', companyId);
     if (excludePoId) params.append('excludePoId', excludePoId);
     const qs = params.toString();
     const url = qs
@@ -2315,7 +2261,6 @@ export const incentiveLogAPI = {
   getAll: async (
     token: string,
     filters?: {
-      companyId?: string;
       brandId?: string;
       itemGroupId?: string;
       itemId?: string;
@@ -2325,7 +2270,6 @@ export const incentiveLogAPI = {
     options?: ListQueryOptions
   ) => {
     const params = new URLSearchParams();
-    if (filters?.companyId)   params.append('companyId',   filters.companyId);
     if (filters?.brandId)     params.append('brandId',     filters.brandId);
     if (filters?.itemGroupId) params.append('itemGroupId', filters.itemGroupId);
     if (filters?.itemId)      params.append('itemId',      filters.itemId);
@@ -2388,9 +2332,8 @@ export const incentiveLogAPI = {
 
 //color API
 export const colorAPI = {
-  getAll: async (token: string, companyId?: string, brandId?: string, options?: ListQueryOptions) => {
+  getAll: async (token: string, brandId?: string, options?: ListQueryOptions) => {
     const params = new URLSearchParams();
-    if (companyId) params.append('companyId', companyId);
     if (brandId)   params.append('brandId',   brandId);
     appendListQuery(params, options);
     const qs  = params.toString();
@@ -2616,7 +2559,6 @@ export interface ItemVariantColor {
  
 export interface ItemVariant {
   id: string;
-  companyId?: string;
   itemGroupId?: string;
   brandId?: string;
   itemName: string;
@@ -2644,14 +2586,12 @@ export const itemVariantAPI = {
     token: string,
     options: {
       itemName: string;
-      companyId?: string;
       itemGroupId?: string;
       brandId?: string;
     }
   ) => {
     const params = new URLSearchParams();
     params.append("itemName", options.itemName);
-    if (options.companyId)  params.append("companyId",  options.companyId);
     if (options.itemGroupId) params.append("itemGroupId", options.itemGroupId);
     if (options.brandId)    params.append("brandId",    options.brandId);
  

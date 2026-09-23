@@ -1,12 +1,9 @@
 "use client";
 
-import { Suspense } from "react";
-import ColorEditPageContent from "./ColorEditPageContent";
+import { ModuleTemporarilyDisabled } from "@/components/module-temporarily-disabled";
+// Temporarily disabled: Colour Master edit screen.
+// import ColorEditPageContent from "./ColorEditPageContent";
 
 export default function Page() {
-  return (
-    <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
-      <ColorEditPageContent />
-    </Suspense>
-  );
+  return <ModuleTemporarilyDisabled moduleName="Colour Master" />;
 }

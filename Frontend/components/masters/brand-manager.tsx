@@ -89,7 +89,7 @@ export function BrandManager() {
         if (!hasLoadedOnce) setIsLoading(true)
         const token = sessionStorage.getItem("authToken")
         if (!token) return
-        const res = await brandAPI.getAll(token, undefined, {
+        const res = await brandAPI.getAll(token, {
           page: currentPage,
           limit: pageSize,
           search: debouncedSearchTerm || undefined,

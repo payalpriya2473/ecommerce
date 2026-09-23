@@ -19,7 +19,9 @@ import {
 } from "lucide-react";
 import {
   purchaseInvoiceAPI, supplierAPI, brandAPI, itemAPI,
-  purchaseOrderAPI, branchAPI, companyAPI, colorAPI,
+  purchaseOrderAPI,
+  // Temporarily disabled: Colour Master API import.
+  // colorAPI,
 } from "@/lib/api";
 import Link from "next/link";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -629,21 +631,19 @@ function PurchaseInvoiceEditContent() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
   const [brands, setBrands] = useState<any[]>([]);
   const [itemsList, setItemsList] = useState<any[]>([]);
   const [supplierPOs, setSupplierPOs] = useState<any[]>([]);
   const [piItems, setPIItems] = useState<PIItem[]>([emptyItem()]);
   const [isGujaratSupplier, setIsGujaratSupplier] = useState(true);
   const [linkedPOItemsMap, setLinkedPOItemsMap] = useState<Record<string, LinkedPOItem[]>>({});
-  const [companies, setCompanies] = useState<any[]>([]);
   // ── Color state (same pattern as register page) ───────────────────────────
   const [colorsByBrand, setColorsByBrand] = useState<Record<string, ColorOption[]>>({});
   const [colorLoadingByBrand, setColorLoadingByBrand] = useState<Record<string, boolean>>({});
 
   const [formData, setFormData] = useState({
-    companyId: "", billNumber: "", billDate: new Date().toISOString().split("T")[0],
-    supplierId: "", purchaseOrderId: "", branchId: "",
+    billNumber: "", billDate: new Date().toISOString().split("T")[0],
+    supplierId: "", purchaseOrderId: "",
     transporterId: "", lrNumber: "", lrDate: "", remarks: "",
     discountPercent: 0, freightAmount: 0, tcsPercent: 0, otherAmount: 0,
   });
@@ -678,8 +678,10 @@ function PurchaseInvoiceEditContent() {
     if (!brandId || colorsByBrand[brandId] || colorLoadingByBrand[brandId]) return;
     setColorLoadingByBrand((prev) => ({ ...prev, [brandId]: true }));
     try {
-      const token = sessionStorage.getItem("authToken") || "";
-      const result = await colorAPI.getByBrand(token, brandId);
+      // Temporarily disabled: Colour Master API call.
+      // const token = sessionStorage.getItem("authToken") || "";
+      // const result = await colorAPI.getByBrand(token, brandId);
+      const result = { data: [] };
       const options = Array.isArray(result?.data)
         ? result.data.map((color: { id: string; colorName: string }) => ({ id: color.id, colorName: color.colorName }))
         : [];
@@ -698,20 +700,13 @@ function PurchaseInvoiceEditContent() {
 
   const loadMasterData = async () => {
     const token = sessionStorage.getItem("authToken") || "";
-    const storedCompanyId = sessionStorage.getItem("companyId") || "";
-    const [suppRes, brandRes, itemRes, branchRes, compRes] = await Promise.all([
-      supplierAPI.getAll(token), brandAPI.getAll(token, storedCompanyId),
-      itemAPI.getAll(token, storedCompanyId), branchAPI.getAll(token, storedCompanyId),
-      companyAPI.getAll(token),
+    const [suppRes, brandRes, itemRes] = await Promise.all([
+      supplierAPI.getAll(token), brandAPI.getAll(token),
+      itemAPI.getAll(token),
     ]);
     if (suppRes.success) setSuppliers(suppRes.data);
     if (brandRes.success) setBrands(brandRes.data);
     if (itemRes.success) setItemsList(itemRes.data);
-    if (branchRes.success) setBranches(branchRes.data);
-    if (compRes.success) {
-      setCompanies(compRes.data);
-      if (storedCompanyId) setFormData((prev) => ({ ...prev, companyId: storedCompanyId }));
-    }
   };
 
   const resolveGstPercent = (item: any): number => {
@@ -735,11 +730,10 @@ function PurchaseInvoiceEditContent() {
       setIsGujaratSupplier(isGuj);
       setFormData((prev) => ({
         ...prev,
-        companyId: String(pi.companyId || prev.companyId || sessionStorage.getItem("companyId") || ""),
         billNumber: pi.billNumber || "",
         billDate: pi.billDate ? pi.billDate.split("T")[0] : new Date().toISOString().split("T")[0],
         supplierId: pi.supplierId || "", purchaseOrderId: pi.purchaseOrderId || "",
-        branchId: pi.branchId ? String(pi.branchId) : "", transporterId: pi.transporterId || "",
+        transporterId: pi.transporterId || "",
         lrNumber: pi.lrNumber || "", lrDate: pi.lrDate ? pi.lrDate.split("T")[0] : "",
         remarks: pi.remarks || "", discountPercent: toNumber(pi.discountPercent),
         freightAmount: toNumber(pi.freightAmount), tcsPercent: toNumber(pi.tcsPercent),
@@ -928,9 +922,7 @@ function PurchaseInvoiceEditContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError("");
-    if (!formData.companyId) { setError("Please select a company"); return; }
     if (!formData.billNumber.trim()) { setError("Bill number is required"); return; }
-    if (!formData.branchId) { setError("Branch is required"); return; }
     if (!formData.supplierId) { setError("Please select a supplier"); return; }
     const validItems = piItems.filter((i) => i.itemName.trim() && i.qty > 0);
     if (validItems.length === 0) { setError("Please add at least one item with name and quantity"); return; }
@@ -963,7 +955,7 @@ function PurchaseInvoiceEditContent() {
       const token = sessionStorage.getItem("authToken") || "";
       const itemsPayload = validItems.map((i) => ({ purchaseOrderId: i.purchaseOrderId || null, itemId: i.itemId || null, brandId: i.brandId || null, variantId: i.variantId || null, variant: normalizeVariantLabel(i.variant) || null, itemName: i.itemName, brandName: i.brandName || null, remarks: i.description || null, qty: i.qty, rate: i.rate, discountRs: i.discountRs, amount: i.amount, poRate: i.poRate, aTaxPercent: i.aTaxPercent, sgstPercent: i.sgstPercent, sgstAmount: i.sgstAmount, cgstPercent: i.cgstPercent, cgstAmount: i.cgstAmount, igstPercent: i.igstPercent, igstAmount: i.igstAmount, serialRows: i.serialRows.filter((r) => r.srNo.trim()).map((r) => ({ color: r.color || null, srNo: r.srNo.trim() })) }));
       const firstLinkedPOId = validItems.find((i) => i.purchaseOrderId)?.purchaseOrderId || formData.purchaseOrderId || null;
-      const result = await purchaseInvoiceAPI.update(piId, { ...formData, purchaseOrderId: firstLinkedPOId, companyId: formData.companyId || sessionStorage.getItem("companyId") || "", discountAmount, tcsAmount, totalAmount, sgst: totalSGST, cgst: totalCGST, igst: totalIGST, debitNoteAmount, netAmount, items: itemsPayload } as any, token);
+      const result = await purchaseInvoiceAPI.update(piId, { ...formData, purchaseOrderId: firstLinkedPOId, discountAmount, tcsAmount, totalAmount, sgst: totalSGST, cgst: totalCGST, igst: totalIGST, debitNoteAmount, netAmount, items: itemsPayload } as any, token);
       if (result.success) { setSuccess(true); setTimeout(() => router.push("/purchase-invoices/list"), 600); }
       else setError(result.message || "Failed to update purchase invoice");
     } catch { setError("Failed to update purchase invoice. Please try again."); }
@@ -1003,33 +995,12 @@ function PurchaseInvoiceEditContent() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Company */}
-                  <div className="space-y-4">
-                    <h3 className="font-semibold text-lg border-b pb-2">Company</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="companyId">Select Company <span className="text-destructive">*</span></Label>
-                        <Select value={formData.companyId ? String(formData.companyId) : ""} onValueChange={(v) => handleChange("companyId", v)}>
-                          <SelectTrigger id="companyId" className="h-10 w-full"><SelectValue placeholder="Select company" /></SelectTrigger>
-                          <SelectContent>{companies.map((c) => (<SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>))}</SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Invoice Details */}
                   <div className="space-y-4">
                     <h3 className="font-semibold text-lg border-b pb-2">Invoice Details</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2"><Label htmlFor="billNumber">Bill No. <span className="text-destructive">*</span></Label><Input id="billNumber" className="h-10 w-full" value={formData.billNumber} onChange={(e) => handleChange("billNumber", e.target.value)} /></div>
                       <div className="space-y-2"><Label htmlFor="billDate">Date <span className="text-destructive">*</span></Label><Input id="billDate" type="date" className="h-10 w-full" value={formData.billDate} onChange={(e) => handleChange("billDate", e.target.value)} required /></div>
-                      <div className="space-y-2">
-                        <Label htmlFor="branchId">Branch <span className="text-destructive">*</span></Label>
-                        <Select value={formData.branchId ? String(formData.branchId) : "none"} onValueChange={(v) => handleChange("branchId", v === "none" ? "" : v)}>
-                          <SelectTrigger id="branchId" className="h-10 w-full"><SelectValue placeholder="Select branch" /></SelectTrigger>
-                          <SelectContent><SelectItem value="none">None</SelectItem>{branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2">

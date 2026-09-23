@@ -22,6 +22,7 @@ import {
   type FinanceCompanyContact,
   type FinanceCompanyRecord,
 } from "../FinanceCompanyForm"
+import { ModuleTemporarilyDisabled } from "@/components/module-temporarily-disabled"
 
 function FinanceCompanyEditContent() {
   const router = useRouter()
@@ -166,22 +167,7 @@ function FinanceCompanyEditContent() {
 }
 
 export default function FinanceCompanyEditPage() {
-  return (
-    <AuthGuard>
-      <AuthenticatedLayout>
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center min-h-[50vh]">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-                <p className="text-muted-foreground">Loading...</p>
-              </div>
-            </div>
-          }
-        >
-          <FinanceCompanyEditContent />
-        </Suspense>
-      </AuthenticatedLayout>
-    </AuthGuard>
-  )
+  // Temporarily disabled: Finance Companies edit screen.
+  // return <AuthGuard><AuthenticatedLayout><Suspense>...</Suspense></AuthenticatedLayout></AuthGuard>
+  return <ModuleTemporarilyDisabled moduleName="Finance Companies" />
 }

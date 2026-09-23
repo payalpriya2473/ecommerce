@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import {
   purchaseInvoiceAPI, supplierAPI, brandAPI, itemAPI,
-  purchaseOrderAPI, branchAPI, companyAPI,
+  purchaseOrderAPI,
 } from "@/lib/api";
 import Link from "next/link";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -27,7 +27,8 @@ import { SearchableSupplierSelect } from "@/components/searchable-supplier-selec
 import { TableSelect } from "@/components/table-select";
 import { getSupplierTaxContext } from "@/lib/gst-utils";
 import { ColorCombobox, type ColorOption } from "@/components/color-combobox";
-import { colorAPI } from "@/lib/api";
+// Temporarily disabled: Colour Master API import.
+// import { colorAPI } from "@/lib/api";
 import {
   findItemVariant,
   getItemVariantLineKey,
@@ -536,8 +537,6 @@ export default function PurchaseInvoiceRegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [companies, setCompanies] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
   const [brands, setBrands] = useState<any[]>([]);
   const [itemsList, setItemsList] = useState<any[]>([]);
   const [supplierPOs, setSupplierPOs] = useState<any[]>([]);
@@ -548,8 +547,8 @@ export default function PurchaseInvoiceRegisterPage() {
   const [colorLoadingByBrand, setColorLoadingByBrand] = useState<Record<string, boolean>>({});
 
   const [formData, setFormData] = useState({
-    companyId: "", billNumber: "", billDate: new Date().toISOString().split("T")[0],
-    supplierId: "", purchaseOrderId: "", branchId: "",
+    billNumber: "", billDate: new Date().toISOString().split("T")[0],
+    supplierId: "", purchaseOrderId: "",
     transporterId: "", lrNumber: "", lrDate: "", remarks: "",
     discountPercent: 0, freightAmount: 0, tcsPercent: 0, otherAmount: 0,
   });
@@ -580,28 +579,23 @@ export default function PurchaseInvoiceRegisterPage() {
 
   const loadMasterData = async () => {
     const token = sessionStorage.getItem("authToken") || "";
-    const storedCompanyId = sessionStorage.getItem("companyId") || "";
-    const [suppRes, brandRes, itemRes, branchRes, compRes] = await Promise.all([
-      supplierAPI.getAll(token), brandAPI.getAll(token, storedCompanyId),
-      itemAPI.getAll(token, storedCompanyId),
-      branchAPI.getAll(token, storedCompanyId), companyAPI.getAll(token),
+    const [suppRes, brandRes, itemRes] = await Promise.all([
+      supplierAPI.getAll(token), brandAPI.getAll(token),
+      itemAPI.getAll(token),
     ]);
     if (suppRes.success)  setSuppliers(suppRes.data);
     if (brandRes.success) setBrands(brandRes.data);
     if (itemRes.success)  setItemsList(itemRes.data);
-    if (branchRes.success) setBranches(branchRes.data);
-    if (compRes.success)  {
-      setCompanies(compRes.data);
-      if (storedCompanyId) setFormData((prev) => ({ ...prev, companyId: storedCompanyId }));
-    }
   };
 
   const loadColorsForBrand = useCallback(async (brandId?: string) => {
     if (!brandId || colorsByBrand[brandId] || colorLoadingByBrand[brandId]) return;
     setColorLoadingByBrand((prev) => ({ ...prev, [brandId]: true }));
     try {
-      const token = sessionStorage.getItem("authToken") || "";
-      const result = await colorAPI.getByBrand(token, brandId);
+      // Temporarily disabled: Colour Master API call.
+      // const token = sessionStorage.getItem("authToken") || "";
+      // const result = await colorAPI.getByBrand(token, brandId);
+      const result = { data: [] };
       const options = Array.isArray(result?.data)
         ? result.data.map((c: { id: string; colorName: string }) => ({ id: c.id, colorName: c.colorName }))
         : [];
@@ -754,9 +748,7 @@ export default function PurchaseInvoiceRegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError("");
-    if (!formData.companyId)      { setError("Please select a company"); return; }
     if (!formData.billNumber.trim()) { setError("Bill number is required"); return; }
-    if (!formData.branchId)       { setError("Branch is required"); return; }
     if (!formData.supplierId)     { setError("Please select a supplier"); return; }
     const validItems = piItems.filter((i) => i.itemName.trim() && i.qty > 0);
     if (validItems.length === 0)  { setError("Please add at least one item with name and quantity"); return; }
@@ -809,7 +801,6 @@ export default function PurchaseInvoiceRegisterPage() {
       const result = await purchaseInvoiceAPI.create({
         ...formData,
         purchaseOrderId: firstLinkedPOId,
-        companyId: formData.companyId || sessionStorage.getItem("companyId") || "",
         discountAmount, tcsAmount, totalAmount,
         sgst: totalSGST, cgst: totalCGST, igst: totalIGST,
         debitNoteAmount, netAmount,
@@ -836,33 +827,12 @@ export default function PurchaseInvoiceRegisterPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Company */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg border-b pb-2">Company</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="companyId">Select Company <span className="text-destructive">*</span></Label>
-                      <Select value={formData.companyId ? String(formData.companyId) : ""} onValueChange={(v) => handleChange("companyId", v)}>
-                        <SelectTrigger id="companyId" className="h-10 w-full"><SelectValue /></SelectTrigger>
-                        <SelectContent>{companies.map((c) => (<SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>))}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Invoice Details */}
                 <div className="space-y-4">
                   <h3 className="font-semibold text-lg border-b pb-2">Invoice Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2"><Label htmlFor="billNumber">Bill No. <span className="text-destructive">*</span></Label><Input id="billNumber" className="h-10 w-full" value={formData.billNumber} onChange={(e) => handleChange("billNumber", e.target.value)} /></div>
                     <div className="space-y-2"><Label htmlFor="billDate">Date <span className="text-destructive">*</span></Label><Input id="billDate" type="date" className="h-10 w-full" value={formData.billDate} onChange={(e) => handleChange("billDate", e.target.value)} required /></div>
-                    <div className="space-y-2">
-                      <Label htmlFor="branchId">Branch <span className="text-destructive">*</span></Label>
-                      <Select value={formData.branchId ? String(formData.branchId) : "none"} onValueChange={(v) => handleChange("branchId", v === "none" ? "" : v)}>
-                        <SelectTrigger id="branchId" className="h-10 w-full"><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="none">None</SelectItem>{branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">

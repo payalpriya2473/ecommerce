@@ -21,7 +21,6 @@ const deleteFile = (filePath) => {
 
 export const registerCategory = async (req, res) => {
   try {
-    const companyId = req.user?.companyId || req.body?.companyId || null;
     const {
       name,
       marginPercent,
@@ -45,28 +44,21 @@ export const registerCategory = async (req, res) => {
       });
     }
 
-    
-    if (companyId) {
-      const [company] = await db.query('SELECT id FROM companies WHERE id = ?', [companyId]);
-      if (company.length === 0)
-        return res.status(404).json({ success: false, message: 'Company not found' });
-    }
 
     
     let slug = req.body.slug?.trim() || buildSlug(name);
 
     
     const [slugCheck] = await db.query(
-      'SELECT id FROM categories WHERE slug = ?' + (companyId ? ' AND companyId = ?' : ' AND companyId IS NULL'),
-      companyId ? [slug, companyId] : [slug]
+      'SELECT id FROM categories WHERE slug = ?',
+      [slug]
     );
     if (slugCheck.length > 0) slug = `${slug}-${Date.now()}`;
 
   
     const [existing] = await db.query(
-      'SELECT id FROM categories WHERE name = ? AND isActive = 1' +
-        (companyId ? ' AND companyId = ?' : ' AND companyId IS NULL'),
-      companyId ? [name.trim(), companyId] : [name.trim()]
+      'SELECT id FROM categories WHERE name = ? AND isActive = 1',
+      [name.trim()]
     );
     if (existing.length > 0)
       return res.status(400).json({ success: false, message: 'A category with this name already exists' });
@@ -77,12 +69,11 @@ export const registerCategory = async (req, res) => {
     // ── insert ────────────────────────────────────────────────────────────────
     const [result] = await db.query(
       `INSERT INTO categories
-         (companyId, name, marginPercent, slug, description, category_image,
+         (name, marginPercent, slug, description, category_image,
           display_order, show_on_website, meta_title, meta_description, seo_heading,
           parent_category_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        companyId || null,
         name.trim(),
         parseFloat(marginPercent) || 0,
         slug,
@@ -98,9 +89,8 @@ export const registerCategory = async (req, res) => {
     );
 
     const [newCategory] = await db.query(
-      `SELECT c.*, co.name AS companyName
+      `SELECT c.*
        FROM categories c
-       LEFT JOIN companies co ON c.companyId = co.id
        WHERE c.id = ?`,
       [result.insertId]
     );
@@ -127,7 +117,6 @@ export const getAllCategories = async (req, res) => {
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
 
-    const companyId = req.user?.companyId || req.query?.companyId || null;
     const { search, page, limit, sortKey, sortDirection } = req.query;
 
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
@@ -147,19 +136,14 @@ export const getAllCategories = async (req, res) => {
 
     const baseFrom = `
       FROM categories c
-      LEFT JOIN companies co ON c.companyId = co.id
     `;
     const whereClauses = ['c.isActive = 1'];
     const params = [];
 
-    if (companyId) {
-      whereClauses.push('(c.companyId = ? OR c.companyId IS NULL)');
-      params.push(companyId);
-    }
     if (search) {
       const term = `%${search}%`;
-      whereClauses.push("(c.name LIKE ? OR COALESCE(co.name, '') LIKE ?)");
-      params.push(term, term);
+      whereClauses.push('c.name LIKE ?');
+      params.push(term);
     }
 
     const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
@@ -169,7 +153,7 @@ export const getAllCategories = async (req, res) => {
       : 'ORDER BY c.display_order ASC, c.createdAt DESC';
 
     let query = `
-      SELECT c.*, co.name AS companyName
+      SELECT c.*
       ${baseFrom}
       ${whereSql}
       ${orderSql}
@@ -209,9 +193,8 @@ export const getCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
     const [category] = await db.query(
-      `SELECT c.*, co.name AS companyName
+      `SELECT c.*
        FROM categories c
-       LEFT JOIN companies co ON c.companyId = co.id
        WHERE c.id = ?`,
       [id]
     );
@@ -287,9 +270,8 @@ export const updateCategory = async (req, res) => {
     );
 
     const [updated] = await db.query(
-      `SELECT c.*, co.name AS companyName
+      `SELECT c.*
        FROM categories c
-       LEFT JOIN companies co ON c.companyId = co.id
        WHERE c.id = ?`,
       [id]
     );
@@ -326,24 +308,3 @@ export const deleteCategory = async (req, res) => {
   }
 };
 
-
-export const getCategoriesByCompany = async (req, res) => {
-  try {
-    const { companyId } = req.params;
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.set('Pragma', 'no-cache');
-
-    const [categories] = await db.query(
-      `SELECT * FROM categories
-       WHERE (companyId = ? OR companyId IS NULL) AND isActive = 1
-       ORDER BY display_order ASC, createdAt DESC`,
-      [companyId]
-    );
-    return res.status(200).json({ success: true, data: categories });
-  } catch (error) {
-    console.error('Get categories by company error:', error);
-    return res
-      .status(500)
-      .json({ success: false, message: 'Failed to fetch categories', error: error.message });
-  }
-};

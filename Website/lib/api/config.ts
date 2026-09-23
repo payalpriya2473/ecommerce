@@ -30,7 +30,6 @@ export const API_BASE_URL =
   readBrowserApiBase() || `${BACKEND_ORIGIN}/api`;
 export const PUBLIC_API_PROXY_BASE = `${API_BASE_URL}/public`;
 export const CUSTOMER_API_PROXY_BASE = `${API_BASE_URL}/customer`;
-export const COMPANY_ID = trimValue(process.env.NEXT_PUBLIC_COMPANY_ID);
 
 export function buildBackendUrl(path = "") {
   if (!path) return BACKEND_ORIGIN;

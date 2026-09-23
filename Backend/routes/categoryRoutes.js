@@ -5,7 +5,6 @@ import {
   getCategoryById,
   updateCategory,
   deleteCategory,
-  getCategoriesByCompany,
 } from '../controllers/categoryController.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { checkPermission } from '../middleware/permissionMiddleware.js';
@@ -30,7 +29,6 @@ const upload = uploadCategoryImages.fields([
 
 router.post('/register',          checkPermission('categories', 'create'), upload, registerCategory);
 router.get('/',                   checkPermission('categories', 'read'),   getAllCategories);
-router.get('/company/:companyId', checkPermission('categories', 'read'),   getCategoriesByCompany);
 router.get('/:id',                checkPermission('categories', 'read'),   getCategoryById);
 router.put('/:id',                checkPermission('categories', 'update'), upload, updateCategory);
 router.delete('/:id',             checkPermission('categories', 'delete'), deleteCategory);

@@ -5,7 +5,6 @@ import { db } from '../config/db.js';
 // ─────────────────────────────────────────────
 export const registerItemGroup = async (req, res) => {
   try {
-    const companyId = req.user?.companyId || req.body?.companyId || null;
     const {
       categoryId, name, combineGroup, hsnCode, gst,
       hasDemoInstallation, buyBackValue, maxQty,
@@ -23,13 +22,6 @@ export const registerItemGroup = async (req, res) => {
       ? parseInt(maxQty)
       : 0;
 
-    if (companyId) {
-      const [company] = await db.query('SELECT id FROM companies WHERE id = ?', [companyId]);
-      if (company.length === 0) {
-        return res.status(404).json({ success: false, message: 'Company not found' });
-      }
-    }
-
     if (categoryId) {
       const [cat] = await db.query('SELECT id FROM categories WHERE id = ? AND isActive = 1', [categoryId]);
       if (cat.length === 0) {
@@ -38,9 +30,8 @@ export const registerItemGroup = async (req, res) => {
     }
 
     const [existing] = await db.query(
-      'SELECT id FROM item_groups WHERE name = ? AND isActive = 1' +
-        (companyId ? ' AND companyId = ?' : ' AND companyId IS NULL'),
-      companyId ? [name.trim(), companyId] : [name.trim()]
+      'SELECT id FROM item_groups WHERE name = ? AND isActive = 1',
+      [name.trim()]
     );
     if (existing.length > 0) {
       return res.status(400).json({ success: false, message: 'An item group with this name already exists' });
@@ -49,10 +40,9 @@ export const registerItemGroup = async (req, res) => {
     // ✅ FIX: No manual ID — let MySQL AUTO_INCREMENT assign it
     const [result] = await db.query(
       `INSERT INTO item_groups
-        (companyId, categoryId, name, combineGroup, hsnCode, gst, hasDemoInstallation, buyBackValue, maxQty)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (categoryId, name, combineGroup, hsnCode, gst, hasDemoInstallation, buyBackValue, maxQty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        companyId || null,
         categoryId || null,
         name.trim(),
         combineGroup || null,
@@ -67,10 +57,9 @@ export const registerItemGroup = async (req, res) => {
     const insertedId = result.insertId;
 
     const [newGroup] = await db.query(
-      `SELECT ig.*, c.name AS categoryName, co.name AS companyName
+      `SELECT ig.*, c.name AS categoryName
        FROM item_groups ig
        LEFT JOIN categories c  ON ig.categoryId = c.id
-       LEFT JOIN companies co ON ig.companyId  = co.id
        WHERE ig.id = ?`,
       [insertedId]
     );
@@ -91,7 +80,6 @@ export const getAllItemGroups = async (req, res) => {
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
 
-    const companyId = req.user?.companyId || req.query?.companyId || null;
     const { categoryId, search, page, limit, sortKey, sortDirection } = req.query;
 
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
@@ -117,15 +105,10 @@ export const getAllItemGroups = async (req, res) => {
     const baseFrom = `
       FROM item_groups ig
       LEFT JOIN categories c  ON ig.categoryId = c.id
-      LEFT JOIN companies co ON ig.companyId  = co.id
     `;
     const whereClauses = ['ig.isActive = 1'];
     const params = [];
 
-    if (companyId) {
-      whereClauses.push('(ig.companyId = ? OR ig.companyId IS NULL)');
-      params.push(companyId);
-    }
     if (categoryId) {
       whereClauses.push('ig.categoryId = ?');
       params.push(categoryId);
@@ -140,7 +123,7 @@ export const getAllItemGroups = async (req, res) => {
     const orderSql = `ORDER BY ${resolvedSortField} ${resolvedSortDirection}`;
 
     let query = `
-      SELECT ig.*, c.name AS categoryName, co.name AS companyName
+      SELECT ig.*, c.name AS categoryName
       ${baseFrom}
       ${whereSql}
       ${orderSql}
@@ -175,10 +158,9 @@ export const getItemGroupById = async (req, res) => {
   try {
     const { id } = req.params;
     const [group] = await db.query(
-      `SELECT ig.*, c.name AS categoryName, co.name AS companyName
+      `SELECT ig.*, c.name AS categoryName
        FROM item_groups ig
        LEFT JOIN categories c  ON ig.categoryId = c.id
-       LEFT JOIN companies co ON ig.companyId  = co.id
        WHERE ig.id = ?`,
       [id]
     );
@@ -225,10 +207,9 @@ export const updateItemGroup = async (req, res) => {
     await db.query(`UPDATE item_groups SET ${updates.join(', ')}, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, values);
 
     const [updated] = await db.query(
-      `SELECT ig.*, c.name AS categoryName, co.name AS companyName
+      `SELECT ig.*, c.name AS categoryName
        FROM item_groups ig
        LEFT JOIN categories c  ON ig.categoryId = c.id
-       LEFT JOIN companies co ON ig.companyId  = co.id
        WHERE ig.id = ?`,
       [id]
     );
@@ -259,24 +240,3 @@ export const deleteItemGroup = async (req, res) => {
   }
 };
 
-export const getItemGroupsByCompany = async (req, res) => {
-  try {
-    const { companyId } = req.params;
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.set('Pragma', 'no-cache');
-
-    const [groups] = await db.query(
-      `SELECT ig.*, c.name AS categoryName
-       FROM item_groups ig
-       LEFT JOIN categories c ON ig.categoryId = c.id
-       WHERE (ig.companyId = ? OR ig.companyId IS NULL) AND ig.isActive = 1
-       ORDER BY ig.createdAt DESC`,
-      [companyId]
-    );
-
-    return res.status(200).json({ success: true, data: groups });
-  } catch (error) {
-    console.error('Get item groups by company error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to fetch item groups', error: error.message });
-  }
-};

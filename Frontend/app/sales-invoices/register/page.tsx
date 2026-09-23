@@ -121,9 +121,7 @@ export default function SalesInvoiceRegisterPage() {
 
   const handleSubmit = async () => {
     setFormError("");
-    if (!formValues.companyId)          { setFormError("Please select a company");            return; }
     if (!formValues.billNumber.trim())  { setFormError("Bill number could not be generated"); return; }
-    if (!formValues.branchId)           { setFormError("Branch is required");                  return; }
     if (!formValues.partyName.trim())   { setFormError("Party / Customer name is required");   return; }
 
     const validItems = formValues.items.filter((i) => i.itemName.trim() && i.qty > 0);
@@ -146,12 +144,9 @@ export default function SalesInvoiceRegisterPage() {
     setIsSubmitting(true);
     try {
       const token     = sessionStorage.getItem("authToken") || "";
-      const companyId = formValues.companyId || sessionStorage.getItem("companyId") || "";
       const totals    = buildInvoiceTotals(validItems, formValues);
 
       const payload = {
-        companyId,
-        branchId:          formValues.branchId,
         billNumber:        formValues.billNumber,
         billDate:          formValues.billDate,
         partyName:         formValues.partyName,

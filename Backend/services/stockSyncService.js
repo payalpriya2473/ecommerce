@@ -429,7 +429,7 @@ export async function runStockSync({ trigger = 'manual', companyCode, filters = 
          JOIN (
            SELECT id,
                   ROW_NUMBER() OVER (
-                    PARTITION BY itemName, COALESCE(itemGroupId,0), COALESCE(brandId,0), COALESCE(companyId,0)
+                    PARTITION BY itemName, COALESCE(itemGroupId,0), COALESCE(brandId,0)
                     ORDER BY sortOrder ASC, id ASC
                   ) - 1 AS rn
            FROM items

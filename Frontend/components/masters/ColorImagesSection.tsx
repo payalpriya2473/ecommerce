@@ -79,14 +79,12 @@ export const EMPTY_VARIANT: VariantEntry = {
 
 export function buildVariantFormData(
   itemName: string,
-  companyId: string,
   itemGroupId: string,
   brandId: string,
   variants: VariantEntry[]
 ): FormData {
   const fd = new FormData();
   fd.append("itemName", itemName);
-  if (companyId) fd.append("companyId", companyId);
   if (itemGroupId) fd.append("itemGroupId", itemGroupId);
   if (brandId) fd.append("brandId", brandId);
 

@@ -299,12 +299,11 @@ interface IncentiveFormFieldsProps {
   error: string;
   isSubmitting: boolean;
   mode: "add" | "edit";
-  companyId?: string;
   lockItem?: boolean;
 }
 
 export function IncentiveFormFields({
-  values, onChange, onSubmit, onCancel, error, isSubmitting, mode, companyId, lockItem = false,
+  values, onChange, onSubmit, onCancel, error, isSubmitting, mode, lockItem = false,
 }: IncentiveFormFieldsProps) {
   const [brands, setBrands]               = useState<Brand[]>([]);
   const [itemGroups, setItemGroups]       = useState<ItemGroup[]>([]);
@@ -343,14 +342,14 @@ export function IncentiveFormFields({
       const token = sessionStorage.getItem("authToken");
       if (!token) return;
       const [bRes, gRes] = await Promise.all([
-        brandAPI.getAll(token, companyId),
-        itemGroupAPI.getAll(token, companyId),
+        brandAPI.getAll(token),
+        itemGroupAPI.getAll(token),
       ]);
       if (bRes.success) setBrands(bRes.data);
       if (gRes.success) setItemGroups(gRes.data);
     };
     load();
-  }, [companyId]);
+  }, []);
 
   // When brand OR itemGroup changes, reload filtered items
   useEffect(() => {
@@ -360,7 +359,7 @@ export function IncentiveFormFields({
       if (!token) return;
       setLoadingItems(true);
       try {
-        const res = await itemAPI.getAll(token, companyId);
+        const res = await itemAPI.getAll(token);
         if (!res.success) return;
         let items: Item[] = res.data;
         if (values.brandId)     items = items.filter((i) => i.brandId     === values.brandId);

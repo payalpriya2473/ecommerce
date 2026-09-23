@@ -698,7 +698,6 @@ interface ItemFormFieldsProps {
   error: string;
   isSubmitting: boolean;
   mode: "add" | "edit";
-  companyId?: string;
   initialBrands?: Brand[];
   initialItemGroups?: ItemGroup[];
 }
@@ -707,7 +706,7 @@ interface ItemFormFieldsProps {
 // Main ItemFormFields
 // ─────────────────────────────────────────────────────────────
 export function ItemFormFields({
-  values, onChange, onSubmit, onCancel, error, isSubmitting, mode, companyId,
+  values, onChange, onSubmit, onCancel, error, isSubmitting, mode,
   initialBrands, initialItemGroups,
 }: ItemFormFieldsProps) {
   const normalizeItemGroup = (group: any): ItemGroup => ({ ...group, id: group?.id || group?._id || "" });
@@ -749,7 +748,7 @@ export function ItemFormFields({
 
   const openIgModal = async () => {
     const token = sessionStorage.getItem("authToken");
-    if (token) { const res = await categoryAPI.getAll(token, companyId); if (res.success) setIgCategories(res.data); }
+    if (token) { const res = await categoryAPI.getAll(token); if (res.success) setIgCategories(res.data); }
     setIgFormValues(EMPTY_ITEM_GROUP_FORM); setIgFormError(""); setIgModalOpen(true);
   };
 
@@ -771,7 +770,6 @@ export function ItemFormFields({
         buyBackValue: igFormValues.buyBackValue ? parseFloat(igFormValues.buyBackValue) : undefined,
         maxQty: igFormValues.maxQty ? parseInt(igFormValues.maxQty) : 0,
       };
-      if (companyId) payload.companyId = companyId;
       const res = await itemGroupAPI.register(payload, token);
       if (res.success) {
         const createdGroup = normalizeItemGroup(res.data);
@@ -790,7 +788,6 @@ export function ItemFormFields({
       const token = sessionStorage.getItem("authToken");
       if (!token) return;
       const payload: any = { name: brandFormValues.name.trim() };
-      if (companyId) payload.companyId = companyId;
       const res = await brandAPI.register(payload, token);
       if (res.success) { setBrands((prev) => [res.data, ...prev]); onChange({ brandId: res.data.id }); setBrandModalOpen(false); }
       else { setBrandFormError(res.message || "Failed to add brand"); }

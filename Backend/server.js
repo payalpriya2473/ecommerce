@@ -18,9 +18,11 @@ import technicianRoutes from './routes/technicianRoutes.js';
 import purchaseInvoiceRoutes from './routes/purchaseinvoicesRoutes.js';
 import invoiceSettingsRoutes from './routes/invoiceSettingsRoutes.js';
 import incentiveRoutes from './routes/incentiveRoutes.js'; 
-import colorRoutes from './routes/colorRoutes.js';
+// Temporarily disabled: Colour Master API routes.
+// import colorRoutes from './routes/colorRoutes.js';
 import offerRoutes from './routes/offerRoutes.js';
-import financeCompanyRoutes from './routes/financeCompanyRoutes.js';
+// Temporarily disabled: Finance Companies API routes.
+// import financeCompanyRoutes from './routes/financeCompanyRoutes.js';
 import salesInvoiceRoutes from './routes/salesInvoiceRoutes.js';
 import publicRoutes from "./routes/publicRoutes.js";
 import customerAuthRouter    from "./routes/customerAuth.js";
@@ -76,6 +78,7 @@ const allowedOrigins = new Set(
   [
     FRONTEND_URL,
     "http://localhost:3000",
+    "http://localhost:3001",
     "https://shop.applenext.in/"
   ]
     .flatMap(expandOriginVariants)
@@ -136,7 +139,8 @@ router.get("/", (req, res) => {
       technicians: "/api/technicians",
       purchaseInvoices: "/api/purchase-invoices",
       incentiveLogs: "/api/incentive-logs",
-      colors: "/api/colors",
+      // Temporarily disabled: Colour Master API endpoint.
+      // colors: "/api/colors",
     }
   });
 });
@@ -192,9 +196,11 @@ router.use('/api/purchase-invoices', purchaseInvoiceRoutes);
 router.use('/api/settings/invoice', invoiceSettingsRoutes);
 router.use('/api/settings/email', emailConfigRoutes);
 router.use('/api/incentive-logs', incentiveRoutes);
-router.use('/api/colors', colorRoutes);
+// Temporarily disabled: Colour Master API route.
+// router.use('/api/colors', colorRoutes);
 router.use('/api/offers', offerRoutes);
-router.use('/api/finance-companies', financeCompanyRoutes);
+// Temporarily disabled: Finance Companies API route.
+// router.use('/api/finance-companies', financeCompanyRoutes);
 router.use('/api/sales-invoices', salesInvoiceRoutes);
 router.use("/api/public", publicRoutes);
 

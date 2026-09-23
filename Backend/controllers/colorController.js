@@ -5,7 +5,6 @@ import { db } from '../config/db.js';
 // ─────────────────────────────────────────────
 export const registerColor = async (req, res) => {
   try {
-    const companyId = req.user?.companyId || req.body?.companyId || null;
     const { brandId, colorName } = req.body;
 
     if (!brandId) {
@@ -31,8 +30,8 @@ export const registerColor = async (req, res) => {
     }
 
     const [result] = await db.query(
-      `INSERT INTO colors (companyId, brandId, colorName) VALUES (?, ?, ?)`,
-      [companyId || null, brandId, colorName.trim()]
+      `INSERT INTO colors (brandId, colorName) VALUES (?, ?)`,
+      [brandId, colorName.trim()]
     );
 
     const [newColor] = await db.query(
@@ -58,7 +57,6 @@ export const getAllColors = async (req, res) => {
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
 
-    const companyId = req.user?.companyId || req.query?.companyId || null;
     const { brandId, search, page, limit, sortKey, sortDirection } = req.query;
 
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
@@ -82,10 +80,6 @@ export const getAllColors = async (req, res) => {
     const whereClauses = ['c.isActive = 1'];
     const params = [];
 
-    if (companyId) {
-      whereClauses.push('(c.companyId = ? OR c.companyId IS NULL)');
-      params.push(companyId);
-    }
     if (brandId) {
       whereClauses.push('c.brandId = ?');
       params.push(brandId);

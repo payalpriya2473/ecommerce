@@ -20,8 +20,10 @@ import {
   EMPTY_COLOR_FORM,
 } from "@/app/inventory-masters/colors/ColorFormFields";
 import type { ColorFormValues } from "@/app/inventory-masters/colors/ColorFormFields";
+import { ModuleTemporarilyDisabled } from "@/components/module-temporarily-disabled";
 
-export default function ColorRegisterPage() {
+// Temporarily disabled Colour Master implementation; preserved for re-enabling.
+function ColorRegisterPageContent() {
   const router = useRouter();
 
   const [formValues, setFormValues] = useState<ColorFormValues>({
@@ -123,4 +125,8 @@ export default function ColorRegisterPage() {
       </AuthenticatedLayout>
     </AuthGuard>
   );
+}
+
+export default function ColorRegisterPage() {
+  return <ModuleTemporarilyDisabled moduleName="Colour Master" />;
 }

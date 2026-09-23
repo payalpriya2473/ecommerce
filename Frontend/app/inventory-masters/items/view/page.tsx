@@ -316,7 +316,6 @@ function ItemViewPageContent() {
                   </CardHeader>
                   <CardContent>
                     <InfoRow label="Category" value={item.categoryName} />
-                    <InfoRow label="Company" value={item.companyName} />
                     <InfoRow label="UOM" value={item.uom} />
                     <InfoRow label="HSN Code" value={item.hsnCode} />
                     <InfoRow label="GST %" value={`${item.gst}%`} />

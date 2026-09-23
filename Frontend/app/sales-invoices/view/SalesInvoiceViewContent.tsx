@@ -144,8 +144,7 @@ export default function SalesInvoiceViewContent() {
       if (result.success) {
         setSI(result.data);
 
-        const companyId = result.data?.companyId ? String(result.data.companyId) : undefined;
-        const brandResult = await brandAPI.getAll(token, companyId);
+        const brandResult = await brandAPI.getAll(token);
         if (brandResult?.success && Array.isArray(brandResult.data)) {
           setBrandsById(
             brandResult.data.reduce((acc: Record<string, string>, brand: any) => {
@@ -155,7 +154,7 @@ export default function SalesInvoiceViewContent() {
           );
         }
 
-        const itemResult = await itemAPI.getAll(token, companyId);
+        const itemResult = await itemAPI.getAll(token);
         if (itemResult?.success && Array.isArray(itemResult.data)) {
           setItemBrandById(
             itemResult.data.reduce((acc: Record<string, string>, item: any) => {
@@ -347,12 +346,6 @@ export default function SalesInvoiceViewContent() {
                           <span className="text-sm">Party: <strong className="text-foreground">{si.partyName || si.customerName || "—"}</strong></span>
                         </div>
                         {si.mobileNo && <p className="text-xs text-muted-foreground">Mobile: {si.mobileNo}</p>}
-                        {si.branchName && (
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                            <p className="text-xs text-muted-foreground">Branch: {si.branchName}</p>
-                          </div>
-                        )}
                         <div className="text-xs text-muted-foreground mt-1.5">
                           Tax Mode:{" "}
                           <span className={`font-semibold ${isGujarat ? "text-blue-600" : "text-orange-600"}`}>
@@ -423,15 +416,6 @@ export default function SalesInvoiceViewContent() {
                   </h3>
                   <div className="space-y-4">
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <DetailTile
-                        label="Branch"
-                        value={
-                          <span className="inline-flex items-start gap-2">
-                            <Building2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                            <span>{si.branchName || "—"}</span>
-                          </span>
-                        }
-                      />
                       <DetailTile
                         label="Payment Mode"
                         tone={paymentModeTone}

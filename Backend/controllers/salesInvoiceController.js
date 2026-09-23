@@ -231,7 +231,7 @@ export const getNextBillNumber = async (req, res) => {
 export const createSalesInvoice = async (req, res) => {
   try {
     let {
-      companyId, branchId, billNumber, billDate,
+      billNumber, billDate,
       customerId, partyName, address, partyCityVillage, mobileNo, adharNo, otpVerified,
       reference1, reference1Address, reference1City, reference1Mobile,
       reference2, reference2Address, reference2City, reference2Mobile,
@@ -246,13 +246,12 @@ export const createSalesInvoice = async (req, res) => {
       installments, items,
     } = req.body;
 
-    const resolvedCompanyId = companyId || req.user?.companyId || null;
     const createdBy         = req.user?.userId || req.user?.id || null;
 
-    if (!resolvedCompanyId || !billDate || !partyName?.trim())
+    if (!billDate || !partyName?.trim())
       return res.status(400).json({
         success: false,
-        message: 'companyId, billDate and partyName are required',
+        message: 'billDate and partyName are required',
       });
 
     if (typeof items === 'string') items = [items];
@@ -264,7 +263,7 @@ export const createSalesInvoice = async (req, res) => {
     // ── Insert header ──────────────────────────────────────────────────────────
     const [result] = await db.query(
       `INSERT INTO sales_invoices
-         (companyId, branchId, billNumber, billDate,
+         (billNumber, billDate,
           customerId, partyName, address, partyCityVillage, mobileNo, adharNo, otpVerified,
           reference1, reference1Address, reference1City, reference1Mobile,
           reference2, reference2Address, reference2City, reference2Mobile,
@@ -276,9 +275,9 @@ export const createSalesInvoice = async (req, res) => {
           fAmt1, fComp1, dbd1, fileNo1,
           fAmt2, fComp2, dbd2, fileNo2,
           salesmanId, remarks, createdBy)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
-        resolvedCompanyId, branchId || null, billNumber || null, billDate,
+        billNumber || null, billDate,
         customerId || null, partyName, address || null, partyCityVillage || null,
         mobileNo || null, adharNo || null, otpVerified ? 1 : 0,
         reference1 || null, reference1Address || null, reference1City || null, reference1Mobile || null,
@@ -398,9 +397,6 @@ export const createSalesInvoice = async (req, res) => {
 // AFTER : LEFT JOIN + GROUP BY for itemCount, plus LIMIT/OFFSET pagination
 export const getAllSalesInvoices = async (req, res) => {
   try {
-    const companyId = req.user?.companyId;
-    const userRole  = req.user?.role;
-
     // Pagination params (default: page 1, 50 per page; pass page=0 to get all)
     const page    = parseInt(req.query.page  ?? 1,  10);
     const limit   = parseInt(req.query.limit ?? 50, 10);
@@ -410,21 +406,17 @@ export const getAllSalesInvoices = async (req, res) => {
     // ── Count query ──────────────────────────────────────────
     let countQuery = 'SELECT COUNT(*) AS total FROM sales_invoices si WHERE 1=1';
     const countParams = [];
-    if (userRole !== 'super_admin') { countQuery += ' AND si.companyId = ?'; countParams.push(companyId); }
     const [[{ total }]] = await db.query(countQuery, countParams);
 
     // ── Data query: replace correlated subquery with JOIN + GROUP BY ──────────
     let query = `
       SELECT si.*,
-             b.name AS branchName,
              COUNT(sii.id) AS itemCount
         FROM sales_invoices si
-        LEFT JOIN branches            b   ON si.branchId        = b.id
         LEFT JOIN sales_invoice_items sii ON sii.salesInvoiceId = si.id
        WHERE 1=1
     `;
     const params = [];
-    if (userRole !== 'super_admin') { query += ' AND si.companyId = ?'; params.push(companyId); }
     query += ' GROUP BY si.id ORDER BY si.createdAt DESC';
     if (paginate) { query += ' LIMIT ? OFFSET ?'; params.push(limit, offset); }
 
@@ -447,9 +439,8 @@ export const getSalesInvoiceById = async (req, res) => {
     const { id } = req.params;
 
     const [invoices] = await db.query(
-      `SELECT si.*, b.name AS branchName
+      `SELECT si.*
          FROM sales_invoices si
-         LEFT JOIN branches b ON si.branchId = b.id
         WHERE si.id = ?`,
       [id]
     );
@@ -513,7 +504,7 @@ export const updateSalesInvoice = async (req, res) => {
   try {
     const { id } = req.params;
     let {
-      branchId, billNumber, billDate,
+      billNumber, billDate,
       customerId, partyName, address, partyCityVillage, mobileNo, adharNo, otpVerified,
       reference1, reference1Address, reference1City, reference1Mobile,
       reference2, reference2Address, reference2City, reference2Mobile,
@@ -537,7 +528,7 @@ export const updateSalesInvoice = async (req, res) => {
     // ── Update header ──────────────────────────────────────────────────────────
     await db.query(
       `UPDATE sales_invoices SET
-         branchId=?, billNumber=?, billDate=?,
+         billNumber=?, billDate=?,
          customerId=?, partyName=?, address=?, partyCityVillage=?, mobileNo=?,
          adharNo=?, otpVerified=?,
          reference1=?, reference1Address=?, reference1City=?, reference1Mobile=?,
@@ -552,7 +543,7 @@ export const updateSalesInvoice = async (req, res) => {
          salesmanId=?, remarks=?
        WHERE id=?`,
       [
-        branchId || null, billNumber || null, billDate,
+        billNumber || null, billDate,
         customerId || null, partyName, address || null, partyCityVillage || null,
         mobileNo || null, adharNo || null, otpVerified ? 1 : 0,
         reference1 || null, reference1Address || null, reference1City || null, reference1Mobile || null,
@@ -665,9 +656,8 @@ export const updateSalesInvoice = async (req, res) => {
     }
 
     const [updated]      = await db.query(
-      `SELECT si.*, b.name AS branchName
+      `SELECT si.*
          FROM sales_invoices si
-         LEFT JOIN branches b ON si.branchId = b.id
         WHERE si.id = ?`,
       [id]
     );

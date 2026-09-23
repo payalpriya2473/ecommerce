@@ -25,7 +25,6 @@ interface FetchState<T> {
 // ─── useCategories ───────────────────────────────────────────────────────────
 
 export function useCategories(options?: {
-  companyId?: string;
   showOnWebsite?: boolean;
 }): FetchState<Category[]> {
   const [data, setData] = useState<Category[]>([]);
@@ -33,10 +32,8 @@ export function useCategories(options?: {
   const [error, setError] = useState<string | null>(null);
   const requestKeyRef = useRef<string | null>(null);
 
-  const companyId = options?.companyId;
   const showOnWebsite = options?.showOnWebsite;
   const requestKey = JSON.stringify({
-    companyId: companyId ?? "",
     showOnWebsite: Boolean(showOnWebsite),
   });
 
@@ -44,7 +41,7 @@ export function useCategories(options?: {
     setLoading(true);
     setError(null);
     try {
-      const result = await publicCategoryAPI.getAll({ companyId, showOnWebsite });
+      const result = await publicCategoryAPI.getAll({ showOnWebsite });
       setData(result);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to load categories";
@@ -52,7 +49,7 @@ export function useCategories(options?: {
     } finally {
       setLoading(false);
     }
-  }, [companyId, showOnWebsite]);
+  }, [showOnWebsite]);
 
   useEffect(() => {
     if (requestKeyRef.current === requestKey) return;
@@ -70,22 +67,19 @@ export function useCategories(options?: {
 
 // ─── useBrands ───────────────────────────────────────────────────────────────
 
-export function useBrands(options?: {
-  companyId?: string;
-}): FetchState<Brand[]> {
+export function useBrands(): FetchState<Brand[]> {
   const [data, setData] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestKeyRef = useRef<string | null>(null);
 
-  const companyId = options?.companyId;
-  const requestKey = JSON.stringify({ companyId: companyId ?? "" });
+  const requestKey = "brands";
 
   const doFetch = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await publicBrandAPI.getAll({ companyId });
+      const result = await publicBrandAPI.getAll();
       setData(result);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to load brands";
@@ -93,7 +87,7 @@ export function useBrands(options?: {
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, []);
 
   useEffect(() => {
     if (requestKeyRef.current === requestKey) return;

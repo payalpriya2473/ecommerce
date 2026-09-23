@@ -18,8 +18,10 @@ import {
   validateFinanceCompanyForm,
   financeCompanyFormToPayload,
 } from "../FinanceCompanyForm"
+import { ModuleTemporarilyDisabled } from "@/components/module-temporarily-disabled"
 
-export default function FinanceCompanyRegisterPage() {
+// Temporarily disabled Finance Companies implementation; preserved for re-enabling.
+function FinanceCompanyRegisterPageContent() {
   const router = useRouter()
   const { canCreate } = usePermissions()
 
@@ -116,4 +118,8 @@ export default function FinanceCompanyRegisterPage() {
       </AuthenticatedLayout>
     </AuthGuard>
   )
+}
+
+export default function FinanceCompanyRegisterPage() {
+  return <ModuleTemporarilyDisabled moduleName="Finance Companies" />
 }

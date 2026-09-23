@@ -21,7 +21,7 @@ function fail(res, msg, status = 400) {
 router.get("/", async (req, res) => {
   try {
     const [[customer]] = await db.query(
-      `SELECT id, companyId, firstName, lastName, email, phone, dob, gender,
+      `SELECT id, firstName, lastName, email, phone, dob, gender,
               avatarUrl, isEmailVerified, isPhoneVerified, mbPoints, createdAt, updatedAt
        FROM website_customers WHERE id = ? AND isActive = 1`,
       [req.customer.id]

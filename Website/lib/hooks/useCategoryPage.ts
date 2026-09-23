@@ -7,7 +7,6 @@ import {
   Item,
   Category,
   Pagination,
-  COMPANY_ID,
   getCategorySlug,
 } from "@/lib/api/publicApi";
 
@@ -124,7 +123,6 @@ export function useCategoryPage(
   categoryRef?: string,
   selectedCategoryId?: string
 ): UseCategoryPageReturn {
-  const companyId = COMPANY_ID;
   const categoryStateKey = `${categoryRef ?? ""}::${selectedCategoryId ?? ""}`;
 
   const [category,   setCategory  ] = useState<Category | null>(null);
@@ -183,9 +181,7 @@ export function useCategoryPage(
 
       try {
         // Step 1: Fetch all categories to resolve the current one
-        const categories = await publicCategoryAPI.getAll({
-          companyId: companyId || undefined,
-        });
+        const categories = await publicCategoryAPI.getAll();
 
         const resolvedCategory = resolveCategory(
           categories,
@@ -208,7 +204,6 @@ export function useCategoryPage(
         // Backend joins items → item_groups → categories via ig.categoryId
         // So passing categoryId here correctly returns only that category's items
         const result = await publicItemAPI.getAll({
-          companyId:  companyId || undefined,
           categoryId: resolvedCategory?.id,   // ← undefined = all products
           limit: 500,
           page:  1,
@@ -232,7 +227,7 @@ export function useCategoryPage(
     // Cleanup: if categoryRef/selectedCategoryId changes mid-flight, ignore old result
     return () => { cancelled = true; };
 
-  }, [categoryRef, selectedCategoryId, companyId]);  // ← re-fetch on every category change
+  }, [categoryRef, selectedCategoryId]);  // ← re-fetch on every category change
 
   // ── Derive available brands FROM the fetched items (not from brand API) ──
   // This ensures only brands present in THIS category are shown in the filter

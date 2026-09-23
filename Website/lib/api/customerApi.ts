@@ -15,7 +15,6 @@ export const CUSTOMER_AUTH_EVENT = "applenext:customer-auth-change";
 
 export interface CustomerProfile {
   id: number;
-  companyId?: number | null;
   firstName: string;
   lastName: string;
   email: string;
@@ -307,7 +306,6 @@ export const customerAuthAPI = {
     email: string;
     password: string;
     dob?: string;
-    companyId?: number;
   }) => {
     const res = await fetch(`${BASE}/auth/register`, {
       method: "POST",
@@ -345,7 +343,6 @@ export const customerAuthAPI = {
     purpose?: string;
     firstName?: string;
     lastName?: string;
-    companyId?: number;
   }) => {
     const res = await fetch(`${BASE}/auth/verify-otp`, {
       method: "POST",

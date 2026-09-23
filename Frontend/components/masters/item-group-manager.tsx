@@ -103,12 +103,10 @@ function AddCategoryModal({
   open,
   onClose,
   onAdded,
-  companyId,
 }: {
   open: boolean
   onClose: () => void
   onAdded: (cat: Category) => void
-  companyId?: string
 }) {
   const [name, setName] = useState("")
   const [marginPercent, setMarginPercent] = useState("")
@@ -130,7 +128,6 @@ function AddCategoryModal({
       const token = sessionStorage.getItem("authToken")
       if (!token) { setError("Not authenticated"); return }
       const payload: any = { name: name.trim(), marginPercent: parseFloat(marginPercent) || 0 }
-      if (companyId) payload.companyId = companyId
       const res = await categoryAPI.register(payload, token)
       if (res.success) { onAdded(res.data); reset(); onClose() }
       else setError(res.message || "Failed to add category")
@@ -215,7 +212,6 @@ function ItemGroupFormFields({
   mode,
   categories: categoriesProp,
   combineGroupOptions,
-  companyId,
   onCategoryAdded,
 }: {
   values: ItemGroupFormValues
@@ -227,7 +223,6 @@ function ItemGroupFormFields({
   mode: "add" | "edit"
   categories: Category[]
   combineGroupOptions: string[]
-  companyId?: string
   onCategoryAdded?: (cat: Category) => void
 }) {
   const [localCats, setLocalCats] = useState<Category[]>([])
@@ -424,7 +419,6 @@ function ItemGroupFormFields({
         open={addCatOpen}
         onClose={() => setAddCatOpen(false)}
         onAdded={handleCategoryAdded}
-        companyId={companyId}
       />
     </>
   )
@@ -479,7 +473,6 @@ export function ItemGroupManager() {
     combineGroup:        group?.combineGroup || "",
     hasDemoInstallation: group?.hasDemoInstallation ?? false,
     buyBackValue:        group?.buyBackValue ?? undefined,
-    companyId:           group?.companyId || "",
     isActive:            group?.isActive ?? true,
   })
 
@@ -530,7 +523,7 @@ export function ItemGroupManager() {
         if (!hasLoadedOnce) setIsLoading(true)
         const token = sessionStorage.getItem("authToken")
         if (!token) return
-        const res = await itemGroupAPI.getAll(token, undefined, undefined, {
+        const res = await itemGroupAPI.getAll(token, undefined, {
           page: currentPage,
           limit: pageSize,
           search: debouncedSearchTerm || undefined,

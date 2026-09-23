@@ -17,8 +17,10 @@ import { ColorCombobox, type ColorOption } from "@/components/color-combobox";
 import { TableSelect } from "@/components/table-select";
 import { useToast } from "@/hooks/use-toast";
 import {
-  brandAPI, itemAPI, branchAPI, companyAPI, colorAPI,
-  financeCompanyAPI, salesInvoiceAPI, type FinanceCompany, type PartyLookupResult,
+  brandAPI, itemAPI,
+  salesInvoiceAPI, type FinanceCompany, type PartyLookupResult,
+  // Temporarily disabled: Colour Master and Finance Companies API imports.
+  // colorAPI, financeCompanyAPI,
 } from "@/lib/api";
 import {
   findItemVariant,
@@ -63,8 +65,6 @@ export interface SIItem {
 }
 
 export interface SalesInvoiceFormValues {
-  companyId: string;
-  branchId: string;
   billNumber: string;
   billDate: string;
   customerId: string;
@@ -143,7 +143,7 @@ const emptyInstallment = (): Installment => ({
 });
 
 export const EMPTY_SI_FORM: SalesInvoiceFormValues = {
-  companyId: "", branchId: "", billNumber: "",
+  billNumber: "",
   billDate: new Date().toISOString().split("T")[0],
   customerId: "", partyName: "", address: "", mobileNo: "",
   partyCityVillage: "",
@@ -788,8 +788,6 @@ export function SalesInvoiceFormFields({
   billLoading = false,
 }: SalesInvoiceFormFieldsProps) {
   const { toast } = useToast();
-  const [companies, setCompanies] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
   const [financeCompanies, setFinanceCompanies] = useState<FinanceCompany[]>([]);
   const [brands, setBrands] = useState<any[]>([]);
   const [itemsList, setItemsList] = useState<any[]>([]);
@@ -922,33 +920,28 @@ export function SalesInvoiceFormFields({
   useEffect(() => {
     const load = async () => {
       const token = sessionStorage.getItem("authToken") || "";
-      const companyId = sessionStorage.getItem("companyId") || "";
-      const [compRes, branchRes, brandRes, itemRes, financeCompRes] = await Promise.all([
-        companyAPI.getAll(token),
-        branchAPI.getAll(token, companyId),
-        brandAPI.getAll(token, companyId),
-        itemAPI.getAll(token, companyId),
-        financeCompanyAPI.getAll(token, companyId),
+      const [brandRes, itemRes] = await Promise.all([
+        brandAPI.getAll(token),
+        itemAPI.getAll(token),
+        // Temporarily disabled: Finance Companies API call.
+        // financeCompanyAPI.getAll(token),
       ]);
-      if (compRes.success)        setCompanies(compRes.data);
-      if (branchRes.success)      setBranches(branchRes.data);
       if (brandRes.success)       setBrands(brandRes.data);
       if (itemRes.success)        setItemsList(itemRes.data);
-      if (financeCompRes.success) setFinanceCompanies(financeCompRes.data);
+      // Temporarily disabled: Finance Companies data remains empty.
+      // if (financeCompRes.success) setFinanceCompanies(financeCompRes.data);
     };
     load();
-    const storedCompanyId = sessionStorage.getItem("companyId") || "";
-    if (storedCompanyId && !values.companyId) onChange({ companyId: storedCompanyId });
   }, []);
-
-  useEffect(() => { invoiceLookupCacheRef.current = null; }, [values.companyId]);
 
   const loadColorsForBrand = useCallback(async (brandId?: string) => {
     if (!brandId || colorsByBrand[brandId] || colorLoadingByBrand[brandId]) return;
     setColorLoadingByBrand((prev) => ({ ...prev, [brandId]: true }));
     try {
-      const token = sessionStorage.getItem("authToken") || "";
-      const result = await colorAPI.getByBrand(token, brandId);
+      // Temporarily disabled: Colour Master API call.
+      // const token = sessionStorage.getItem("authToken") || "";
+      // const result = await colorAPI.getByBrand(token, brandId);
+      const result = { data: [] };
       const options = Array.isArray(result?.data) ? result.data.map((c: { id: string; colorName: string }) => ({ id: c.id, colorName: c.colorName })) : [];
       setColorsByBrand((prev) => ({ ...prev, [brandId]: options }));
     } catch {
@@ -1208,7 +1201,6 @@ export function SalesInvoiceFormFields({
     set("installments", arr);
   };
 
-  const branchOptions = branches.map((b) => ({ id: String(b.id), label: b.name }));
   const financeCompanyOptions = financeCompanies.map((f) => ({ id: String(f.id), label: f.name }));
   const getFinanceCompanySelectValue = useCallback((value: string) => {
     if (!value) return "";
@@ -1241,20 +1233,6 @@ export function SalesInvoiceFormFields({
         .inst-table td { border: 1px solid #d1d5db; vertical-align: middle; }
       `}</style>
 
-      {/* ── Company ── */}
-      <div className="space-y-4">
-        <h3 className="font-semibold text-lg border-b pb-2">Company</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label>Select Company <span className="text-destructive">*</span></Label>
-            <Select value={values.companyId ? String(values.companyId) : ""} onValueChange={(v) => set("companyId", v)}>
-              <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>{companies.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
       {/* ── Invoice Details ── */}
       <div className="space-y-4">
         <h3 className="font-semibold text-lg border-b pb-2">Invoice Details</h3>
@@ -1269,10 +1247,6 @@ export function SalesInvoiceFormFields({
           <div className="space-y-2">
             <Label>Date <span className="text-destructive">*</span></Label>
             <Input className="h-10 w-full" type="date" value={values.billDate} onChange={(e) => set("billDate", e.target.value)} required />
-          </div>
-          <div className="space-y-2">
-            <Label>Branch <span className="text-destructive">*</span></Label>
-            <InlineSelect value={values.branchId ? String(values.branchId) : ""} options={branchOptions} onValueChange={(v) => set("branchId", v)} />
           </div>
         </div>
       </div>

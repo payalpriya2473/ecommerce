@@ -6,7 +6,6 @@ import {
   getItemById,
   updateItem,
   deleteItem,
-  getItemsByCompany,
   getItemImages,
   deleteItemImage,
 } from '../controllers/itemController.js';
@@ -38,7 +37,6 @@ router.post(
 );
 
 router.get('/',                   checkPermission('items', 'read'),   getAllItems);
-router.get('/company/:companyId', checkPermission('items', 'read'),   getItemsByCompany);
 router.get('/:id',                checkPermission('items', 'read'),   getItemById);
 
 router.put(

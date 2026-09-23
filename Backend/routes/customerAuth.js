@@ -83,7 +83,7 @@ function phoneSqlExpression(columnName = "phone") {
   return `REPLACE(REPLACE(REPLACE(REPLACE(${columnName}, ' ', ''), '-', ''), '(', ''), ')', '')`;
 }
 
-async function getOrCreateCustomerByPhone(phone, companyId = null) {
+async function getOrCreateCustomerByPhone(phone) {
   const [rows] = await db.query(
     `SELECT * FROM website_customers
       WHERE ${phoneSqlExpression("phone")} = ?
@@ -93,8 +93,8 @@ async function getOrCreateCustomerByPhone(phone, companyId = null) {
   if (rows.length) return rows[0];
 
   const [result] = await db.query(
-    `INSERT INTO website_customers (phone, companyId, isPhoneVerified) VALUES (?, ?, 1)`,
-    [phone, companyId]
+    `INSERT INTO website_customers (phone, isPhoneVerified) VALUES (?, 1)`,
+    [phone]
   );
   const [newRows] = await db.query(
     "SELECT * FROM website_customers WHERE id = ?",
@@ -107,11 +107,11 @@ async function getOrCreateCustomerByPhone(phone, companyId = null) {
 
 /**
  * POST /api/customer/auth/register
- * Body: { firstName, lastName, phone, email, password, dob?, companyId? }
+ * Body: { firstName, lastName, phone, email, password, dob? }
  */
 router.post("/register", async (req, res) => {
   try {
-    const { firstName, lastName, password, dob, companyId } = req.body;
+    const { firstName, lastName, password, dob } = req.body;
     const phone = normalizePhone(req.body.phone);
     const email = normalizeEmail(req.body.email);
 
@@ -138,9 +138,9 @@ router.post("/register", async (req, res) => {
 
     const [result] = await db.query(
       `INSERT INTO website_customers
-         (companyId, firstName, lastName, email, phone, passwordHash, dob)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [companyId || null, firstName, lastName, email, phone, passwordHash, dob || null]
+         (firstName, lastName, email, phone, passwordHash, dob)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [firstName, lastName, email, phone, passwordHash, dob || null]
     );
 
     const [[customer]] = await db.query(
@@ -278,11 +278,11 @@ router.post("/send-otp", async (req, res) => {
 
 /**
  * POST /api/customer/auth/verify-otp
- * Body: { phone, otp, purpose, firstName?, lastName?, companyId? }
+ * Body: { phone, otp, purpose, firstName?, lastName? }
  */
 router.post("/verify-otp", async (req, res) => {
   try {
-    const { otp, purpose = "login", firstName, lastName, companyId } = req.body;
+    const { otp, purpose = "login", firstName, lastName } = req.body;
     const phone = normalizePhone(req.body.phone);
     if (!phone || !otp) return fail(res, "Phone and OTP are required");
 
@@ -311,9 +311,9 @@ router.post("/verify-otp", async (req, res) => {
         customer = existingByPhone;
       } else {
         const [result] = await db.query(
-          `INSERT INTO website_customers (companyId, firstName, lastName, phone, isPhoneVerified)
-           VALUES (?, ?, ?, ?, 1)`,
-          [companyId || null, firstName, lastName || "", phone]
+          `INSERT INTO website_customers (firstName, lastName, phone, isPhoneVerified)
+           VALUES (?, ?, ?, 1)`,
+          [firstName, lastName || "", phone]
         );
         [[customer]] = await db.query(
           "SELECT * FROM website_customers WHERE id = ?",
@@ -321,7 +321,7 @@ router.post("/verify-otp", async (req, res) => {
         );
       }
     } else {
-      customer = await getOrCreateCustomerByPhone(phone, companyId);
+      customer = await getOrCreateCustomerByPhone(phone);
     }
 
     // Mark phone verified
@@ -352,7 +352,7 @@ router.post("/verify-otp", async (req, res) => {
 /**
  * POST /api/customer/auth/social
  * Body: { provider: 'google'|'facebook', providerUid, email?, firstName?, lastName?,
- *         avatarUrl?, accessToken?, tokenExpiry?, profileData?, companyId? }
+ *         avatarUrl?, accessToken?, tokenExpiry?, profileData? }
  *
  * The frontend must validate the token with the OAuth provider and
  * send us the verified providerUid. Never trust the uid without verification in production.
@@ -369,7 +369,6 @@ router.post("/social", async (req, res) => {
       accessToken: socialAccessToken,
       tokenExpiry,
       profileData,
-      companyId,
     } = req.body;
 
     if (!provider || !providerUid) {
@@ -424,10 +423,9 @@ router.post("/social", async (req, res) => {
         // Create new customer
         const [result] = await db.query(
           `INSERT INTO website_customers
-             (companyId, firstName, lastName, email, avatarUrl, isEmailVerified)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+             (firstName, lastName, email, avatarUrl, isEmailVerified)
+           VALUES (?, ?, ?, ?, ?)`,
           [
-            companyId || null,
             firstName,
             lastName,
             email || null,

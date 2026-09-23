@@ -74,12 +74,11 @@ const NO_SPINNER_CLASS =
 // ─────────────────────────────────────────────────────────────
 
 function AddCategoryModal({
-  open, onClose, onAdded, companyId,
+  open, onClose, onAdded,
 }: {
   open: boolean
   onClose: () => void
   onAdded: (cat: Category) => void
-  companyId?: string
 }) {
   const [name, setName] = useState("")
   const [marginPercent, setMarginPercent] = useState("")
@@ -100,7 +99,6 @@ function AddCategoryModal({
       const token = sessionStorage.getItem("authToken")
       if (!token) { setError("Not authenticated"); return }
       const payload: any = { name: name.trim(), marginPercent: parseFloat(marginPercent) || 0 }
-      if (companyId) payload.companyId = companyId
       const res = await categoryAPI.register(payload, token)
       if (res.success) { onAdded(res.data); reset(); onClose() }
       else setError(res.message || "Failed to add category")
@@ -184,7 +182,6 @@ interface ItemGroupFormFieldsProps {
   mode: "add" | "edit"
   categories: Category[]
   combineGroupOptions?: string[]
-  companyId?: string
   onCategoryAdded?: (category: Category) => void
 }
 
@@ -198,7 +195,6 @@ export function ItemGroupFormFields({
   mode,
   categories: categoriesProp,
   combineGroupOptions = [],
-  companyId,
   onCategoryAdded,
 }: ItemGroupFormFieldsProps) {
   const [localCats, setLocalCats] = useState<Category[]>([])
@@ -399,7 +395,6 @@ export function ItemGroupFormFields({
         open={addCatOpen}
         onClose={() => setAddCatOpen(false)}
         onAdded={handleCategoryAdded}
-        companyId={companyId}
       />
     </>
   )

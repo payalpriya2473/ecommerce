@@ -20,7 +20,6 @@ const getEditorId = (req) => {
 
 export const getAllIncentiveLogs = async (req, res) => {
   try {
-    const companyId = req.user?.companyId || req.query?.companyId || null;
     const { brandId, itemGroupId, itemId, fromDate, toDate, search, page, limit, sortKey, sortDirection } = req.query;
 
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
@@ -51,7 +50,6 @@ export const getAllIncentiveLogs = async (req, res) => {
     const whereClauses = ['il.isActive = 1'];
     const params = [];
 
-    if (companyId)   { whereClauses.push('il.companyId = ?');      params.push(companyId); }
     if (brandId)     { whereClauses.push('il.brandId = ?');        params.push(brandId); }
     if (itemGroupId) { whereClauses.push('il.itemGroupId = ?');    params.push(itemGroupId); }
     if (itemId)      { whereClauses.push('il.itemId = ?');         params.push(itemId); }
@@ -131,7 +129,7 @@ export const getItemDefaults = async (req, res) => {
         brandId: item.brandId || null, brandName: item.brandName || null,
         itemGroupId: item.itemGroupId || null, itemGroupName: item.itemGroupName || null,
         nlc: item.nlc, incentive: item.incentive, margin: item.margin,
-        offerPrice: item.offerPrice, companyId: item.companyId,
+        offerPrice: item.offerPrice,
       },
     });
   } catch (error) {
@@ -145,7 +143,6 @@ export const registerIncentiveLog = async (req, res) => {
     await conn.beginTransaction();
 
     const editedBy  = getEditorId(req);
-    const companyId = req.user?.companyId || req.body?.companyId || null;
     const { itemId, effectiveDate, oldNlc, oldIncentive, oldMargin, oldOfferPrice, newNlc, newIncentive, newMargin, newOfferPrice, remarks } = req.body;
 
     if (!itemId)        return res.status(400).json({ success: false, message: 'Item is required' });
@@ -157,12 +154,12 @@ export const registerIncentiveLog = async (req, res) => {
     //  FIX: No manual ID — MySQL AUTO_INCREMENT assigns it
     const [result] = await conn.query(
       `INSERT INTO incentive_logs (
-        companyId, itemId, brandId, itemGroupId, effectiveDate,
+        itemId, brandId, itemGroupId, effectiveDate,
         oldNlc, oldIncentive, oldMargin, oldOfferPrice,
         newNlc, newIncentive, newMargin, newOfferPrice, remarks, editedBy
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        companyId || item.companyId || null, itemId,
+        itemId,
         item.brandId || null, item.itemGroupId || null, effectiveDate,
         parseFloat(oldNlc) || 0, parseFloat(oldIncentive) || 0,
         parseFloat(oldMargin) || 0, parseFloat(oldOfferPrice) || 0,

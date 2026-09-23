@@ -3,17 +3,15 @@
 import {
   API_BASE_URL,
   BACKEND_ORIGIN,
-  COMPANY_ID,
   PUBLIC_API_PROXY_BASE,
   buildBackendUrl,
 } from "@/lib/api/config";
 
-export { API_BASE_URL, BACKEND_ORIGIN, COMPANY_ID };
+export { API_BASE_URL, BACKEND_ORIGIN };
 export const PUBLIC_API_URL = PUBLIC_API_PROXY_BASE;
 
 export interface Category {
   id: string | number;
-  companyId?: string;
   name: string;
   marginPercent?: number;
   slug?: string;
@@ -31,16 +29,13 @@ export interface Category {
 export interface Brand {
   id: string | number;
   name: string;
-  companyId?: string;
   iconUrl?: string | null;
-  companyName?: string;
   isActive: boolean;
   createdAt?: string;
 }
 
 export interface Item {
   id: string | number;
-  companyId?: string;
   itemGroupId?: string;
   openingStock?: number;
   stockValue?: number;
@@ -127,7 +122,6 @@ export interface ApiResponse<T> {
 }
 
 export interface ItemsFilter {
-  companyId?: string;
   categoryId?: string | number;
   brandId?: string | number;
   ids?: Array<string | number>;
@@ -290,29 +284,12 @@ export function getCategoryUrl(category: Pick<Category, "id" | "name" | "slug">)
   )}`;
 }
 
-function cleanCompanyId(val?: string): string {
-  const t = val?.trim() ?? "";
-  if (
-    !t ||
-    t === "undefined" ||
-    t === "null" ||
-    t === "your-company-uuid-here" ||
-    t === "your-company-id-here"
-  ) {
-    return "";
-  }
-  return t;
-}
-
 export const publicCategoryAPI = {
   getAll: async (options?: {
-    companyId?: string;
     showOnWebsite?: boolean;
   }): Promise<Category[]> => {
     const params = new URLSearchParams();
-    const cid = cleanCompanyId(options?.companyId || COMPANY_ID);
 
-    if (cid) params.append("companyId", cid);
     if (options?.showOnWebsite) params.append("showOnWebsite", "true");
 
     const qs = params.toString();
@@ -326,16 +303,8 @@ export const publicCategoryAPI = {
 };
 
 export const publicBrandAPI = {
-  getAll: async (options?: { companyId?: string }): Promise<Brand[]> => {
-    const params = new URLSearchParams();
-    const cid = cleanCompanyId(options?.companyId || COMPANY_ID);
-
-    if (cid) params.append("companyId", cid);
-
-    const qs = params.toString();
-    const path = qs ? `/brands?${qs}` : "/brands";
-
-    const res = await apiFetch<Brand[]>(path);
+  getAll: async (): Promise<Brand[]> => {
+    const res = await apiFetch<Brand[]>("/brands");
     return res.success && Array.isArray(res.data) ? res.data : [];
   },
 };
@@ -352,9 +321,7 @@ export const publicItemAPI = {
     filter?: ItemsFilter
   ): Promise<{ items: Item[]; pagination: Pagination }> => {
     const params = new URLSearchParams();
-    const cid = cleanCompanyId(filter?.companyId || COMPANY_ID);
 
-    if (cid) params.append("companyId", cid);
     if (filter?.categoryId != null) params.append("categoryId", String(filter.categoryId));
     if (filter?.brandId != null) params.append("brandId", String(filter.brandId));
     if (filter?.ids?.length) {

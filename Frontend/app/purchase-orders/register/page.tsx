@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ShoppingCart, AlertCircle, Plus, Trash2, ArrowLeft, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
-import { purchaseOrderAPI, supplierAPI, brandAPI, itemAPI, itemGroupAPI, companyAPI } from "@/lib/api";
+import { purchaseOrderAPI, supplierAPI, brandAPI, itemAPI, itemGroupAPI } from "@/lib/api";
 import Link from "next/link";
 import { SearchableSupplierSelect } from "@/components/searchable-supplier-select";
 import { TableSelect, type TableSelectOption } from "@/components/table-select";
@@ -300,9 +300,6 @@ export default function PurchaseOrderRegisterPage() {
   const [itemGroups, setItemGroups] = useState<any[]>([]);
   const [pendingPOQtyByGroup, setPendingPOQtyByGroup] = useState<Record<string, number>>({});
   const [nextPONumber, setNextPONumber] = useState("PO-0001");
-  const [companies, setCompanies] = useState<any[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState("");
-  const [userRole, setUserRole] = useState("");
   const [poItems, setPOItems] = useState<POItem[]>([emptyItem()]);
   const [isGujaratSupplier, setIsGujaratSupplier] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState("");
@@ -326,23 +323,16 @@ export default function PurchaseOrderRegisterPage() {
 
   const loadMasterData = async () => {
     const token = sessionStorage.getItem("authToken") || "";
-    const companyId = sessionStorage.getItem("companyId") || "";
-    const role = sessionStorage.getItem("userRole") || "";
-    setUserRole(role);
-    if (role === "super_admin") {
-      const r = await companyAPI.getAll(token);
-      if (r.success) setCompanies(r.data);
-    } else { setSelectedCompanyId(companyId); }
     const [bR, iR, sR, gR] = await Promise.all([
-      brandAPI.getAll(token, companyId), itemAPI.getAll(token, companyId),
-      supplierAPI.getAll(token), itemGroupAPI.getAll(token, companyId),
+      brandAPI.getAll(token), itemAPI.getAll(token),
+      supplierAPI.getAll(token), itemGroupAPI.getAll(token),
     ]);
     if (bR.success) setBrands(bR.data);
     if (iR.success) setItems(iR.data);
     if (sR.success) setSuppliers(sR.data);
     if (gR.success) setItemGroups(gR.data);
     try {
-      const pR = await purchaseOrderAPI.getPendingQtyByGroup(token, companyId);
+      const pR = await purchaseOrderAPI.getPendingQtyByGroup(token);
       if (pR?.success) setPendingPOQtyByGroup(pR.data || {});
     } catch { setPendingPOQtyByGroup({}); }
   };
@@ -507,7 +497,6 @@ export default function PurchaseOrderRegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError("");
-    if (userRole === "super_admin" && !selectedCompanyId) { setError("Please select a company"); return; }
     if (!formData.supplierId) { setError("Please select a supplier"); return; }
     const completedItems = poItems.filter((i) => (i.itemId || "").trim());
     if (completedItems.length === 0) { setError("Please add at least one item"); return; }
@@ -522,7 +511,7 @@ export default function PurchaseOrderRegisterPage() {
     try {
       const token = sessionStorage.getItem("authToken") || "";
       const result = await purchaseOrderAPI.create({
-        ...formData, companyId: selectedCompanyId || sessionStorage.getItem("companyId") || "",
+        ...formData,
         discountAmount: da, totalAmount: ta,
         sgst: validItems.reduce((s, i) => s + toNum(i.sgstAmount), 0),
         cgst: validItems.reduce((s, i) => s + toNum(i.cgstAmount), 0),
@@ -561,21 +550,6 @@ export default function PurchaseOrderRegisterPage() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-6">
-
-                  {userRole === "super_admin" && (
-                    <div className="space-y-4">
-                      <h3 className="font-semibold text-lg border-b pb-2">Company</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <Label>Select Company <span className="text-destructive">*</span></Label>
-                          <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-                            <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
-                            <SelectContent>{companies.map((c) => <SelectItem key={c.id} value={sid(c.id)}>{c.name}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   <div className="space-y-4">
                     <h3 className="font-semibold text-lg border-b pb-2">Order Details</h3>

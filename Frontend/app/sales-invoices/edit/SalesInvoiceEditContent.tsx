@@ -145,8 +145,6 @@ export default function SalesInvoiceEditContent() {
         : EMPTY_SI_FORM.installments;
 
       setFormValues({
-        companyId:         String(si.companyId || sessionStorage.getItem("companyId") || ""),
-        branchId:          si.branchId ? String(si.branchId) : "",
         billNumber:        si.billNumber || "",
         billDate:          si.billDate ? si.billDate.split("T")[0] : new Date().toISOString().split("T")[0],
         customerId:        si.customerId || "",
@@ -207,9 +205,7 @@ export default function SalesInvoiceEditContent() {
 
   const handleSubmit = async () => {
     setFormError("");
-    if (!formValues.companyId)         { setFormError("Please select a company"); return; }
     if (!formValues.billNumber.trim()) { setFormError("Bill number is required"); return; }
-    if (!formValues.branchId)          { setFormError("Branch is required"); return; }
     if (!formValues.partyName.trim())  { setFormError("Party / Customer name is required"); return; }
 
     const validItems = formValues.items.filter((i) => i.itemName.trim() && i.qty > 0);
@@ -227,8 +223,6 @@ export default function SalesInvoiceEditContent() {
       const totals = buildInvoiceTotals(validItems, formValues);
 
       const payload = {
-        companyId:         formValues.companyId || sessionStorage.getItem("companyId") || "",
-        branchId:          formValues.branchId,
         billNumber:        formValues.billNumber,
         billDate:          formValues.billDate,
         partyName:         formValues.partyName,

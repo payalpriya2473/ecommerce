@@ -105,7 +105,6 @@ async function ensureSchema() {
           id BIGINT(20) NOT NULL AUTO_INCREMENT,
           orderNumber VARCHAR(40) NOT NULL DEFAULT '',
           customerId BIGINT(20) NOT NULL,
-          companyId BIGINT(11) DEFAULT NULL,
           status ENUM('pending_payment','processing','shipped','delivered','cancelled','returned','payment_failed') NOT NULL DEFAULT 'processing',
           statusLabel VARCHAR(80) NOT NULL DEFAULT 'Order Placed',
           paymentMethod VARCHAR(30) NOT NULL DEFAULT 'cod',
@@ -398,7 +397,7 @@ router.post("/", async (req, res) => {
     if (requestedIds.length > 0) {
       const [rows] = await db.query(
         `SELECT
-           i.id, i.itemName, i.variant, i.gst, i.isActive, i.companyId,
+           i.id, i.itemName, i.variant, i.gst, i.isActive,
            i.offerPrice AS itemOfferPrice, i.nlc AS itemNlc,
            b.name   AS brandName,
            cat.name AS categoryName,
@@ -455,7 +454,6 @@ router.post("/", async (req, res) => {
         unitPrice,
         originalPrice,
         gst: row ? Number(row.gst) || 0 : Number(entry.gst) || 0,
-        companyId: row?.companyId ?? null,
       });
     }
 
@@ -475,8 +473,6 @@ router.post("/", async (req, res) => {
       paymentMethod,
     });
 
-    const companyId = lines.find((l) => l.companyId != null)?.companyId ?? null;
-
     // ── Persist ───────────────────────────────────────────────────────────
     connection = await db.getConnection();
     await connection.beginTransaction();
@@ -489,14 +485,14 @@ router.post("/", async (req, res) => {
 
     const [result] = await connection.query(
       `INSERT INTO website_orders
-         (orderNumber, customerId, companyId, status, statusLabel,
+         (orderNumber, customerId, status, statusLabel,
           paymentMethod, paymentDetail, paymentStatus,
           deliveryType, deliveryLabel, couponCode,
           subtotal, productDiscount, couponDiscount, platformDiscount,
           deliveryCharge, codFee, taxAmount, totalAmount,
           addressId, shipType, shipName, shipPhone, shipLine1, shipLine2,
           shipCity, shipState, shipPinCode, notes)
-       VALUES (?, ?, ?, ?, ?,
+       VALUES (?, ?, ?, ?,
                ?, ?, ?,
                ?, ?, ?,
                ?, ?, ?, ?,
@@ -506,7 +502,6 @@ router.post("/", async (req, res) => {
       [
         "",
         customerId,
-        companyId,
         initialStatus,
         initialStatusLabel,
         paymentMethod,

@@ -83,7 +83,7 @@ router.get('/by-item/:itemId', authenticate, async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/item-variant-colors/by-item-group
-// Returns colors for ALL variants of a product family (same itemName+group+brand+company)
+// Returns colors for ALL variants of a product family (same itemName+group+brand)
 // Query: ?masterId=<items.id>
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/by-item-group', authenticate, async (req, res) => {
@@ -97,9 +97,9 @@ router.get('/by-item-group', authenticate, async (req, res) => {
     const m = master[0];
     const [siblings] = await db.query(
       `SELECT id FROM items
-       WHERE itemName = ? AND (itemGroupId <=> ?) AND (brandId <=> ?) AND (companyId <=> ?) AND isActive = 1
+       WHERE itemName = ? AND (itemGroupId <=> ?) AND (brandId <=> ?) AND isActive = 1
        ORDER BY sortOrder ASC`,
-      [m.itemName, m.itemGroupId, m.brandId, m.companyId]
+      [m.itemName, m.itemGroupId, m.brandId]
     );
 
     const result = [];

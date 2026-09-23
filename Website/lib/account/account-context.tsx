@@ -26,7 +26,6 @@ export type AccountPanelSettingKey =
 
 export interface AccountProfile {
   id?: number;
-  companyId?: number | null;
   firstName: string;
   lastName: string;
   email: string;
@@ -213,7 +212,6 @@ function writeStoredAccount(customerId: string | number | null | undefined, data
 function profileFromApi(customer: CustomerProfile): AccountProfile {
   return normalizeProfile({
     id: customer.id,
-    companyId: customer.companyId ?? null,
     firstName: customer.firstName ?? "",
     lastName: customer.lastName ?? "",
     email: customer.email ?? "",

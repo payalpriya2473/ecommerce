@@ -11,7 +11,7 @@ import { authenticate } from '../middleware/auth.js'; // your existing auth midd
 
 const router = express.Router();
 
-// GET /api/item-variants?itemName=&companyId=&itemGroupId=&brandId=
+// GET /api/item-variants?itemName=&itemGroupId=&brandId=
 router.get('/', authenticate, getItemVariants);
 
 // POST /api/item-variants  (multipart/form-data)

@@ -164,7 +164,6 @@ function POPrintContent() {
 
   useEffect(() => {
     const userRole = sessionStorage.getItem("userRole") || ""
-    const companyId = sessionStorage.getItem("companyId") || ""
     setRole(userRole)
     const load = async () => {
       try {
@@ -175,19 +174,16 @@ function POPrintContent() {
         ])
         if (!poRes.success) { setError("Purchase order not found") }
         else { setPO(normalizePO(poRes.data || {})) }
-         if (companyRes.success) {
-          setCompanies(companyRes.data || [])
-          // Auto-select company from PO's companyId
-          const poCompanyId = poRes.data?.companyId || ""
-          if (poCompanyId) {
-            const matched = companyRes.data.find((c: Company) => c.id === poCompanyId)
-            if (matched) {
-              setSelectedCompanyId(matched.id)
-              setSelectedCompany(matched)
-            }
-          } else if (userRole !== "super_admin" && companyId) {
-            setSelectedCompanyId(companyId)
-            setSelectedCompany(companyRes.data.find((c: Company) => c.id === companyId) || null)
+        if (companyRes.success) {
+          // Company is only used as the printable letterhead (business profile).
+          // Purchase orders are no longer tied to a company, so default to the
+          // first active business profile; the user can still switch it below.
+          const list: Company[] = companyRes.data || []
+          setCompanies(list)
+          const defaultCompany = list.find((c: any) => c.isActive !== false && c.isActive !== 0) || list[0]
+          if (defaultCompany) {
+            setSelectedCompanyId(defaultCompany.id)
+            setSelectedCompany(defaultCompany)
           }
         }
       } catch { setError("Failed to load purchase order") }

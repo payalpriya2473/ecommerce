@@ -16,7 +16,7 @@ import {
   ShoppingCart, AlertCircle, CheckCircle2, Trash2,
   ArrowLeft, ChevronUp, ChevronDown, AlertTriangle, XCircle, MessageSquare, Plus,
 } from "lucide-react"
-import { purchaseOrderAPI, supplierAPI, brandAPI, itemAPI, itemGroupAPI, companyAPI } from "@/lib/api"
+import { purchaseOrderAPI, supplierAPI, brandAPI, itemAPI, itemGroupAPI } from "@/lib/api"
 import Link from "next/link"
 import { usePermissions } from "@/hooks/usePermissions"
 import { SearchableSupplierSelect } from "@/components/searchable-supplier-select"
@@ -494,9 +494,6 @@ function PurchaseOrderEditContent() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
-  const [companies, setCompanies] = useState<any[]>([])
-  const [selectedCompanyId, setSelectedCompanyId] = useState("")
-  const [userRole, setUserRole] = useState("")
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [brands, setBrands] = useState<any[]>([])
   const [items, setItems] = useState<any[]>([])
@@ -533,37 +530,22 @@ function PurchaseOrderEditContent() {
     if (!poId) return
     const load = async () => {
       const token = sessionStorage.getItem("authToken") || ""
-      const sessionCompanyId = sessionStorage.getItem("companyId") || ""
-      const role = sessionStorage.getItem("userRole") || ""
-      setUserRole(role)
-      const poRes = await purchaseOrderAPI.getById(token, poId)
-      const resolvedCompanyId = sid(poRes?.data?.companyId || sessionCompanyId)
-      setSelectedCompanyId(resolvedCompanyId)
-      if (role === "super_admin") { const cr = await companyAPI.getAll(token); if (cr.success) setCompanies(cr.data) }
       const [bR, iR, sR, gR] = await Promise.all([
-        brandAPI.getAll(token, resolvedCompanyId), itemAPI.getAll(token, resolvedCompanyId),
-        supplierAPI.getAll(token), itemGroupAPI.getAll(token, resolvedCompanyId),
+        brandAPI.getAll(token), itemAPI.getAll(token),
+        supplierAPI.getAll(token), itemGroupAPI.getAll(token),
       ])
       if (bR.success) setBrands(bR.data)
       if (iR.success) setItems(iR.data)
       if (sR.success) setSuppliers(sR.data)
       if (gR.success) setItemGroups(gR.data)
       try {
-        const pR = await purchaseOrderAPI.getPendingQtyByGroup(token, resolvedCompanyId, poId)
+        const pR = await purchaseOrderAPI.getPendingQtyByGroup(token, poId)
         if (pR?.success) setPendingPOQtyByGroup(pR.data || {})
       } catch { setPendingPOQtyByGroup({}) }
       setPendingLoaded(true); setMasterLoaded(true)
     }
     load()
   }, [poId])
-
-  const handleCompanyChange = async (newCompanyId: string) => {
-    setSelectedCompanyId(newCompanyId)
-    const token = sessionStorage.getItem("authToken") || ""
-    const [bR, iR, gR] = await Promise.all([brandAPI.getAll(token, newCompanyId), itemAPI.getAll(token, newCompanyId), itemGroupAPI.getAll(token, newCompanyId)])
-    if (bR.success) setBrands(bR.data); if (iR.success) setItems(iR.data); if (gR.success) setItemGroups(gR.data)
-    setPOItems([emptyItem()])
-  }
 
   useEffect(() => {
     if (!poId || !masterLoaded || !pendingLoaded || suppliers.length === 0 || items.length === 0 || itemGroups.length === 0) return
@@ -749,7 +731,6 @@ function PurchaseOrderEditContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError("")
-    if (userRole === "super_admin" && !selectedCompanyId) { setError("Please select a company"); return }
     if (!formData.supplierId) { setError("Please select a supplier"); return }
     const completedItems = poItems.filter((i) => (i.itemId || "").trim())
     if (completedItems.length === 0) { setError("Please add at least one item"); return }
@@ -764,7 +745,7 @@ function PurchaseOrderEditContent() {
     try {
       const token = sessionStorage.getItem("authToken") || ""
       const result = await purchaseOrderAPI.update(poId, {
-        ...formData, companyId: selectedCompanyId || sessionStorage.getItem("companyId") || "",
+        ...formData,
         discountAmount: da, totalAmount: ta,
         sgst: validItems.reduce((s, i) => s + toNum(i.sgstAmount), 0),
         cgst: validItems.reduce((s, i) => s + toNum(i.cgstAmount), 0),
@@ -813,21 +794,6 @@ function PurchaseOrderEditContent() {
             <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-6">
               {success && <Alert className="border-green-500 bg-green-50"><CheckCircle2 className="h-4 w-4 text-green-600" /><AlertDescription className="text-green-800">Purchase Order updated successfully! Redirecting...</AlertDescription></Alert>}
               {error && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>}
-
-              {userRole === "super_admin" && (
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg border-b pb-2">Company</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Select Company <span className="text-destructive">*</span></Label>
-                      <Select value={selectedCompanyId} onValueChange={handleCompanyChange}>
-                        <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
-                        <SelectContent>{companies.map((c) => <SelectItem key={c.id} value={sid(c.id)}>{c.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <div className="space-y-4">
                 <h3 className="font-semibold text-lg border-b pb-2">Order Details</h3>

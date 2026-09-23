@@ -335,7 +335,7 @@ export function CategoryManager() {
         if (!hasLoadedOnce) setIsLoading(true)
         const token = sessionStorage.getItem("authToken")
         if (!token) return
-        const res = await categoryAPI.getAll(token, undefined, {
+        const res = await categoryAPI.getAll(token, {
           page: currentPage,
           limit: pageSize,
           search: debouncedSearchTerm || undefined,

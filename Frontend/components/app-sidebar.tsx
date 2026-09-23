@@ -175,18 +175,19 @@ export function AppSidebar({
       title: "Master Data",
       icon: Briefcase,
       children: [
-        {
-          title: "Companies",
-          href: "/company/list",
-          icon: Building2,
-          requiredPermission: "companies:read",
-        },
-        {
-          title: "Branches",
-          href: "/branch/list",
-          icon: Store,
-          requiredPermission: "branches:read",
-        },
+        // Temporarily disabled: Companies & Branches navigation (single e-commerce store).
+        // {
+        //   title: "Companies",
+        //   href: "/company/list",
+        //   icon: Building2,
+        //   requiredPermission: "companies:read",
+        // },
+        // {
+        //   title: "Branches",
+        //   href: "/branch/list",
+        //   icon: Store,
+        //   requiredPermission: "branches:read",
+        // },
         {
           title: "Inventory",
           icon: Package,
@@ -257,12 +258,13 @@ export function AppSidebar({
               icon: TrendingUp,
               requiredPermission: "items:read",
             },
-            {                                          
-  title: "Color Master",
-  href: "/inventory-masters/colors",
-  icon: Palette,
-  requiredPermission: "colors:read",
-},
+            // Temporarily disabled: Colour Master navigation.
+            // {
+            //   title: "Color Master",
+            //   href: "/inventory-masters/colors",
+            //   icon: Palette,
+            //   requiredPermission: "colors:read",
+            // },
 
           ],
         },
@@ -308,12 +310,13 @@ export function AppSidebar({
           icon: Users,
           requiredPermission: "suppliers:read",
         },
-        {
-          title: "Finance Comp.",
-          href: "/inventory-masters/finance-companies",
-          icon: Building2,
-          requiredPermission: "finance_companies:read",
-        },
+        // Temporarily disabled: Finance Companies navigation.
+        // {
+        //   title: "Finance Comp.",
+        //   href: "/inventory-masters/finance-companies",
+        //   icon: Building2,
+        //   requiredPermission: "finance_companies:read",
+        // },
       ],
     },
     {

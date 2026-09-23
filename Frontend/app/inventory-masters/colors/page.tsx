@@ -55,8 +55,11 @@ import {
 import type { ColorFormValues } from "@/app/inventory-masters/colors/ColorFormFields";
 import type { SortState } from "@/lib/table-sort";
 import { TablePagination, DEFAULT_PAGE_SIZE } from "@/components/ui/table-pagination";
+import { ModuleTemporarilyDisabled } from "@/components/module-temporarily-disabled";
 
-export default function ColorsPage() {
+// Temporarily disabled Colour Master implementation. Keep this component intact
+// so the module can be restored by rendering it from ColorsPage below.
+function ColorsPageContent() {
   type ColorSortKey = "brandName" | "colorName";
   const router = useRouter();
 
@@ -126,7 +129,7 @@ export default function ColorsPage() {
         if (!hasLoadedOnce) setIsLoading(true);
         const token = sessionStorage.getItem("authToken");
         if (!token) return;
-        const result = await colorAPI.getAll(token, undefined, undefined, {
+        const result = await colorAPI.getAll(token, undefined, {
           page: currentPage,
           limit: pageSize,
           search: debouncedSearchTerm || undefined,
@@ -538,4 +541,8 @@ export default function ColorsPage() {
       </AuthenticatedLayout>
     </AuthGuard>
   );
+}
+
+export default function ColorsPage() {
+  return <ModuleTemporarilyDisabled moduleName="Colour Master" />;
 }

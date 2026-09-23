@@ -54,19 +54,13 @@ const getRemainingQtyMap = async (poIds, excludePiId = null) => {
 // ─── OPTIMIZED: getInvoiceMeta ────────────────────────────────────────────────
 // BEFORE: two sequential await db.query calls  → 2 serial round-trips
 // AFTER : Promise.all runs both queries in parallel → 1 round-trip worth of latency
-const getInvoiceMeta = async (supplierId, branchId) => {
-  const [supplierResult, branchResult] = await Promise.all([
-    supplierId
-      ? db.query('SELECT name FROM suppliers WHERE id = ?', [supplierId]).catch(() => [[]])
-      : Promise.resolve([[]]),
-    branchId
-      ? db.query('SELECT name FROM branches WHERE id = ?', [branchId]).catch(() => [[]])
-      : Promise.resolve([[]]),
-  ]);
+const getInvoiceMeta = async (supplierId) => {
+  const [supplierResult] = supplierId
+    ? await db.query('SELECT name FROM suppliers WHERE id = ?', [supplierId]).catch(() => [[]])
+    : [[]];
 
   return {
-    supplierName:  supplierResult[0][0]?.name  ?? null,
-    branchNameStr: branchResult[0][0]?.name    ?? null,
+    supplierName: supplierResult?.[0]?.name ?? null,
   };
 };
 
@@ -81,7 +75,6 @@ const insertSerialRows = async (purchaseInvoiceItemId, serialRows, meta = {}) =>
     billNumber    = null,
     billDate      = null,
     rate          = null,
-    branchNameStr = null,
   } = meta;
 
   const insertRows = [];
@@ -102,7 +95,6 @@ const insertSerialRows = async (purchaseInvoiceItemId, serialRows, meta = {}) =>
         billNumber,
         billDate || null,
         rate     || null,
-        branchNameStr,
         'in_stock',
       ]);
     }
@@ -114,7 +106,7 @@ const insertSerialRows = async (purchaseInvoiceItemId, serialRows, meta = {}) =>
     `INSERT INTO purchase_invoice_item_serials
        (purchaseInvoiceItemId, serialNo, color, type,
         purchaseParty, purchaseBillNo, purchaseDate,
-        purchaseRate, branchName, status)
+        purchaseRate, status)
      VALUES ?`,
     [insertRows]
   );
@@ -162,7 +154,7 @@ const getInvoiceItemsByInvoiceId = async (invoiceId, purchaseOrderId = null) => 
 export const createPurchaseInvoice = async (req, res) => {
   try {
     let {
-      billNumber, billDate, supplierId, purchaseOrderId, branchId,
+      billNumber, billDate, supplierId, purchaseOrderId,
       transporterId, lrNumber, lrDate, remarks,
       discountPercent, discountAmount, freightAmount,
       tcsPercent, tcsAmount, otherAmount, totalAmount,
@@ -170,7 +162,6 @@ export const createPurchaseInvoice = async (req, res) => {
       debitNoteAmount, netAmount, items,
     } = req.body;
 
-    const companyId = req.user?.companyId || req.body?.companyId || null;
     const createdBy = req.user?.userId || req.user?.id || null;
 
     if (!supplierId || !billDate) {
@@ -212,21 +203,20 @@ export const createPurchaseInvoice = async (req, res) => {
       }
     }
 
-    // Parallel fetch of supplier + branch metadata
-    const { supplierName, branchNameStr } = await getInvoiceMeta(supplierId, branchId);
+    const { supplierName } = await getInvoiceMeta(supplierId);
 
     const [result] = await db.query(
       `INSERT INTO purchase_invoices
-         (companyId, billNumber, billDate, supplierId,
-          purchaseOrderId, branchId, transporterId, lrNumber, lrDate,
+         (billNumber, billDate, supplierId,
+          purchaseOrderId, transporterId, lrNumber, lrDate,
           remarks, discountPercent, discountAmount, freightAmount,
           tcsPercent, tcsAmount, otherAmount, totalAmount,
           sgst, cgst, igst, rcmSgst, rcmCgst, rcmIgst,
           debitNoteAmount, netAmount, createdBy)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
-        companyId, billNumber || null, billDate, supplierId,
-        purchaseOrderId || null, branchId || null,
+        billNumber || null, billDate, supplierId,
+        purchaseOrderId || null,
         transporterId || null, lrNumber || null, lrDate || null,
         remarks || null,
         discountPercent || 0, discountAmount || 0, freightAmount || 0,
@@ -278,7 +268,6 @@ export const createPurchaseInvoice = async (req, res) => {
           billNumber:    billNumber    || null,
           billDate:      billDate      || null,
           rate:          item.rate     || null,
-          branchNameStr,
         });
       }
     }
@@ -295,9 +284,6 @@ export const createPurchaseInvoice = async (req, res) => {
 // AFTER : LEFT JOIN + GROUP BY for itemCount, plus LIMIT/OFFSET pagination
 export const getAllPurchaseInvoices = async (req, res) => {
   try {
-    const companyId = req.user?.companyId;
-    const userRole  = req.user?.role;
-
     // Pagination (pass page=0 to disable)
     const page    = parseInt(req.query.page  ?? 1,  10);
     const limit   = parseInt(req.query.limit ?? 50, 10);
@@ -307,7 +293,6 @@ export const getAllPurchaseInvoices = async (req, res) => {
     // ── Count query ──────────────────────────────────────────
     let countQuery = 'SELECT COUNT(*) AS total FROM purchase_invoices pi WHERE 1=1';
     const countParams = [];
-    if (userRole !== 'super_admin') { countQuery += ' AND pi.companyId = ?'; countParams.push(companyId); }
     const [[{ total }]] = await db.query(countQuery, countParams);
 
     // ── Data query: replace correlated subquery with JOIN + GROUP BY ──────────
@@ -321,7 +306,6 @@ export const getAllPurchaseInvoices = async (req, res) => {
        WHERE 1=1
     `;
     const params = [];
-    if (userRole !== 'super_admin') { query += ' AND pi.companyId = ?'; params.push(companyId); }
     query += ' GROUP BY pi.id ORDER BY pi.createdAt DESC';
     if (paginate) { query += ' LIMIT ? OFFSET ?'; params.push(limit, offset); }
 
@@ -403,7 +387,7 @@ export const updatePurchaseInvoice = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      billNumber, billDate, supplierId, purchaseOrderId, branchId,
+      billNumber, billDate, supplierId, purchaseOrderId,
       transporterId, lrNumber, lrDate, remarks,
       discountPercent, discountAmount, freightAmount,
       tcsPercent, tcsAmount, otherAmount, totalAmount,
@@ -449,7 +433,7 @@ export const updatePurchaseInvoice = async (req, res) => {
     await db.query(
       `UPDATE purchase_invoices SET
         billNumber=?, billDate=?, supplierId=?,
-        purchaseOrderId=?, branchId=?,
+        purchaseOrderId=?,
         transporterId=?, lrNumber=?, lrDate=?,
         remarks=?, discountPercent=?, discountAmount=?,
         freightAmount=?, tcsPercent=?, tcsAmount=?,
@@ -460,7 +444,7 @@ export const updatePurchaseInvoice = async (req, res) => {
        WHERE id=?`,
       [
         billNumber || null, billDate, supplierId,
-        purchaseOrderId || null, branchId || null,
+        purchaseOrderId || null,
         transporterId || null, lrNumber || null, lrDate || null,
         remarks || null,
         discountPercent || 0, discountAmount || 0, freightAmount || 0,
@@ -472,8 +456,7 @@ export const updatePurchaseInvoice = async (req, res) => {
       ]
     );
 
-    // Parallel fetch of supplier + branch metadata
-    const { supplierName, branchNameStr } = await getInvoiceMeta(supplierId, branchId);
+    const { supplierName } = await getInvoiceMeta(supplierId);
 
     if (Array.isArray(parsedItems)) {
       const [existingItems] = await db.query(
@@ -530,7 +513,6 @@ export const updatePurchaseInvoice = async (req, res) => {
             billNumber:    billNumber    || null,
             billDate:      billDate      || null,
             rate:          item.rate     || null,
-            branchNameStr,
           });
         }
       }
@@ -624,22 +606,15 @@ export const deletePurchaseInvoice = async (req, res) => {
 export const getPOsBySupplier = async (req, res) => {
   try {
     const { supplierId } = req.params;
-    const companyId  = req.user?.companyId;
-    const userRole   = req.user?.role;
     const excludePiId = req.query?.excludePiId || null;
 
-    const query = userRole !== 'super_admin'
-      ? `SELECT po.id, po.poNumber, po.poDate, po.netAmount
+    const [allOrders] = await db.query(
+      `SELECT po.id, po.poNumber, po.poDate, po.netAmount
          FROM purchase_orders po
-         WHERE po.supplierId = ? AND po.companyId = ?
-         ORDER BY po.createdAt DESC`
-      : `SELECT po.id, po.poNumber, po.poDate, po.netAmount
-         FROM purchase_orders po
-         WHERE po.supplierId = ?
-         ORDER BY po.createdAt DESC`;
-
-    const params      = userRole !== 'super_admin' ? [supplierId, companyId] : [supplierId];
-    const [allOrders] = await db.query(query, params);
+        WHERE po.supplierId = ?
+        ORDER BY po.createdAt DESC`,
+      [supplierId]
+    );
     if (!allOrders.length) return res.json({ success: true, data: [] });
 
     const poIds        = allOrders.map((po) => String(po.id));
@@ -685,9 +660,7 @@ export const getPOsBySupplier = async (req, res) => {
 
 export const getSerialStockReport = async (req, res) => {
   try {
-    const { itemId, brandId, status, fromDate, toDate, serialNo, companyId } = req.query;
-    const userRole      = req.user?.role;
-    const userCompanyId = req.user?.companyId;
+    const { itemId, brandId, status, fromDate, toDate, serialNo } = req.query;
 
     let query = `
       SELECT
@@ -727,13 +700,6 @@ export const getSerialStockReport = async (req, res) => {
     `;
     const params = [];
 
-    if (userRole !== 'super_admin') {
-      query += ' AND pi.companyId = ?';
-      params.push(userCompanyId);
-    } else if (companyId) {
-      query += ' AND pi.companyId = ?';
-      params.push(companyId);
-    }
     if (itemId)   { query += ' AND pii.itemId = ?';        params.push(itemId);  }
     if (brandId)  { query += ' AND pii.brandId = ?';       params.push(brandId); }
     if (status)   { query += ' AND piis.status = ?';       params.push(status);  }

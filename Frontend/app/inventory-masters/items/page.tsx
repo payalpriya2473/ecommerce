@@ -94,8 +94,7 @@ export default function ItemsPage() {
         (item.categoryName || "").toLowerCase().includes(query) ||
         (item.brandName || "").toLowerCase().includes(query) ||
         (item.itemGroupName || "").toLowerCase().includes(query) ||
-        (item.hsnCode || "").toLowerCase().includes(query) ||
-        (item.companyName || "").toLowerCase().includes(query));
+        (item.hsnCode || "").toLowerCase().includes(query));
   const matchesCategoryFilter = (item: Item, categoryNames: string[]) =>
     categoryNames.length === 0 || categoryNames.includes(item.categoryName || "");
   const matchesStockFilter = (item: Item, stockFilters: StockFilterValue[]) =>
@@ -300,7 +299,6 @@ export default function ItemsPage() {
 
         const result = await itemAPI.getAll(
           token,
-          undefined,
           debouncedSearchTerm || undefined,
           {
             statuses: selectedStatuses,

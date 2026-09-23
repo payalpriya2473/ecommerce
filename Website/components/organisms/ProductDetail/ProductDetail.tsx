@@ -20,7 +20,6 @@ import {
   getItemOriginalPrice,
   Item,
   Category,
-  COMPANY_ID,
   publicOfferAPI,
   type PublicOffer,
 } from "@/lib/api/publicApi";
@@ -525,7 +524,6 @@ export default function ProductDetail() {
       const catId = fetchedItem.categoryId;
       if (catId) {
         const relatedRes = await publicItemAPI.getAll({
-          companyId: COMPANY_ID || undefined,
           categoryId: catId,
           limit: 10,
           page: 1,
@@ -533,14 +531,13 @@ export default function ProductDetail() {
         setRelatedItems(
           relatedRes.items.filter((i) => String(i.id) !== String(fetchedItem.id)).slice(0, 8)
         );
-        const allCats = await publicCategoryAPI.getAll({ companyId: COMPANY_ID || undefined });
+        const allCats = await publicCategoryAPI.getAll();
         const foundCat = allCats.find((c) => String(c.id) === String(catId));
         if (foundCat) setCategory(foundCat);
       }
 
       if (recentIds.length > 0) {
         const recentRes = await publicItemAPI.getAll({
-          companyId: COMPANY_ID || undefined,
           ids: recentIds,
         });
         setRecentlyViewedItems(recentRes.items.filter((i) => String(i.id) !== String(fetchedItem.id)));

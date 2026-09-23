@@ -60,7 +60,6 @@ function ItemEditPageContent() {
   const [formValues, setFormValues] = useState<ItemFormValues>({ ...EMPTY_ITEM_FORM });
   const [brands, setBrands]         = useState<Brand[]>([]);
   const [itemGroups, setItemGroups] = useState<ItemGroup[]>([]);
-  const [companyId, setCompanyId]   = useState<string>("");
 
   const [isLoading,    setIsLoading]    = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -79,8 +78,6 @@ function ItemEditPageContent() {
         if (!res.success) { setLoadError(res.message || "Item not found"); setIsLoading(false); return; }
 
         const item = res.data;
-        setCompanyId(item.companyId || "");
-
         // ── Map variants ─────────────────────────────────────
         const fallbackVariants: any[] = item.variants || [];
         let variantRows: ItemVariantRow[];
@@ -125,8 +122,8 @@ function ItemEditPageContent() {
         });
 
         const [bRes, gRes] = await Promise.all([
-          brandAPI.getAll(token, item.companyId),
-          itemGroupAPI.getAll(token, item.companyId),
+          brandAPI.getAll(token),
+          itemGroupAPI.getAll(token),
         ]);
         if (bRes.success) setBrands(bRes.data);
         if (gRes.success) setItemGroups(gRes.data);
@@ -234,7 +231,6 @@ function ItemEditPageContent() {
                   error={formError}
                   isSubmitting={isSubmitting}
                   mode="edit"
-                  companyId={companyId}
                   initialBrands={brands}
                   initialItemGroups={itemGroups}
                 />

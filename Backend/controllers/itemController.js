@@ -172,13 +172,11 @@ async function _fetchItemWithVariants(itemId) {
     `SELECT i.*,
             ig.name AS itemGroupName,
             b.name  AS brandName,
-            co.name AS companyName,
             c.name  AS categoryName
      FROM items i
      LEFT JOIN item_groups ig ON i.itemGroupId = ig.id
      LEFT JOIN categories  c  ON ig.categoryId  = c.id
      LEFT JOIN brands      b  ON i.brandId      = b.id
-     LEFT JOIN companies  co  ON i.companyId    = co.id
      WHERE i.id = ?`,
     [itemId]
   );
@@ -189,10 +187,10 @@ async function _fetchItemWithVariants(itemId) {
   // All sibling variant rows
   const [siblings] = await db.query(
     `SELECT * FROM items
-     WHERE itemName = ? AND (itemGroupId <=> ?) AND (brandId <=> ?) AND (companyId <=> ?)
+     WHERE itemName = ? AND (itemGroupId <=> ?) AND (brandId <=> ?)
        AND isActive = 1
      ORDER BY sortOrder ASC`,
-    [master.itemName, master.itemGroupId, master.brandId, master.companyId]
+    [master.itemName, master.itemGroupId, master.brandId]
   );
   master.variants = siblings;
 
@@ -240,7 +238,6 @@ async function _fetchItemWithVariants(itemId) {
 // ─────────────────────────────────────────────
 export const registerItem = async (req, res) => {
   try {
-    const companyId = req.user?.companyId || req.body?.companyId || null;
     const {
       itemGroupId, brandId, itemName, uom, hsnCode, gst,
       hasDemoInstallation, isActive, description, freeService, billPrintNote, warranty,
@@ -258,10 +255,6 @@ export const registerItem = async (req, res) => {
     }
 
     // FK checks
-    if (companyId) {
-      const [company] = await db.query('SELECT id FROM companies WHERE id = ?', [companyId]);
-      if (!company.length) return res.status(404).json({ success: false, message: 'Company not found' });
-    }
     if (itemGroupId) {
       const [ig] = await db.query('SELECT id FROM item_groups WHERE id = ? AND isActive = 1', [itemGroupId]);
       if (!ig.length) return res.status(404).json({ success: false, message: 'Item group not found' });
@@ -273,7 +266,6 @@ export const registerItem = async (req, res) => {
 
     const hasDesc = await itemsHasDescription();
     const masterCols = [
-      companyId   || null,
       itemGroupId || null,
       brandId     || null,
       itemName.trim(),
@@ -289,7 +281,7 @@ export const registerItem = async (req, res) => {
     ];
 
     const masterColNames = [
-      'companyId', 'itemGroupId', 'brandId', 'itemName', 'uom', 'hsnCode', 'gst',
+      'itemGroupId', 'brandId', 'itemName', 'uom', 'hsnCode', 'gst',
       'hasDemoInstallation', 'isActive', ...(hasDesc ? ['description'] : []),
       'freeService', 'billPrintNote', 'warranty',
     ];
@@ -360,7 +352,6 @@ export const getAllItems = async (req, res) => {
   try {
     res.set('Cache-Control', 'no-store');
 
-    const companyId = req.user?.companyId || req.query?.companyId || null;
     const {
       itemGroupId,
       brandId,
@@ -415,7 +406,6 @@ export const getAllItems = async (req, res) => {
       LEFT JOIN item_groups ig ON i.itemGroupId = ig.id
       LEFT JOIN categories  c  ON ig.categoryId  = c.id
       LEFT JOIN brands      b  ON i.brandId      = b.id
-      LEFT JOIN companies  co  ON i.companyId    = co.id
     `;
     const whereClauses = ['i.sortOrder = 0'];
     const params = [];
@@ -433,7 +423,6 @@ export const getAllItems = async (req, res) => {
       addWhere('i.isActive = 1');
     }
 
-    if (companyId) addWhere('(i.companyId = ? OR i.companyId IS NULL)', [companyId]);
     if (itemGroupId) addWhere('i.itemGroupId = ?', [itemGroupId]);
     if (brandId) addWhere('i.brandId = ?', [brandId]);
     if (selectedItemGroupIds.length) {
@@ -463,11 +452,10 @@ export const getAllItems = async (req, res) => {
           COALESCE(ig.name, '') LIKE ? OR
           COALESCE(b.name, '') LIKE ? OR
           COALESCE(c.name, '') LIKE ? OR
-          COALESCE(co.name, '') LIKE ? OR
           COALESCE(i.hsnCode, '') LIKE ? OR
           CAST(COALESCE(i.openingStock, 0) AS CHAR) LIKE ?
         )`,
-        [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm],
+        [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm],
       );
     }
 
@@ -477,7 +465,6 @@ export const getAllItems = async (req, res) => {
       SELECT i.*,
              ig.name AS itemGroupName,
              b.name  AS brandName,
-             co.name AS companyName,
              c.name  AS categoryName
       ${baseSelect}
       ${whereSql}
@@ -523,7 +510,7 @@ export const getAllItems = async (req, res) => {
 
       const variantMap = {};
       for (const v of allVariants) {
-        const key = `${v.itemName}__${v.itemGroupId}__${v.brandId}__${v.companyId}`;
+        const key = `${v.itemName}__${v.itemGroupId}__${v.brandId}`;
         if (!variantMap[key]) variantMap[key] = [];
         variantMap[key].push(v);
       }
@@ -547,7 +534,7 @@ export const getAllItems = async (req, res) => {
       const colorMap = await _fetchColorsForItems(primaryIds);
 
       for (const item of masterItems) {
-        const key = `${item.itemName}__${item.itemGroupId}__${item.brandId}__${item.companyId}`;
+        const key = `${item.itemName}__${item.itemGroupId}__${item.brandId}`;
         item.variants     = variantMap[key] || [item];
         item.variantCount = item.variants.length;
         item.primaryImage = imgMap[item.id] || null;
@@ -611,7 +598,6 @@ export const updateItem = async (req, res) => {
       // ── Full variant replace (ATOMIC: delete + re-insert in one transaction,
       //    so a failed insert can never destroy the item) ──
       const newMaster = {
-        companyId:           orig.companyId,
         itemGroupId:         updateData.itemGroupId   !== undefined ? (updateData.itemGroupId   || null) : orig.itemGroupId,
         brandId:             updateData.brandId       !== undefined ? (updateData.brandId       || null) : orig.brandId,
         itemName:            (updateData.itemName     || orig.itemName).trim(),
@@ -633,7 +619,7 @@ export const updateItem = async (req, res) => {
       // Omit `description` from the INSERT if this DB doesn't have that column.
       const hasDesc = await itemsHasDescription();
       const insertCols = [
-        'companyId', 'itemGroupId', 'brandId', 'itemName', 'uom', 'hsnCode', 'gst',
+        'itemGroupId', 'brandId', 'itemName', 'uom', 'hsnCode', 'gst',
         'hasDemoInstallation', 'isActive', ...(hasDesc ? ['description'] : []),
         'freeService', 'billPrintNote', 'warranty',
         'variant', 'openingStock', 'minimumQty', 'maxMOPPercent',
@@ -647,13 +633,13 @@ export const updateItem = async (req, res) => {
         await conn.beginTransaction();
         await conn.query(
           `DELETE FROM items
-           WHERE itemName = ? AND (itemGroupId <=> ?) AND (brandId <=> ?) AND (companyId <=> ?)`,
-          [orig.itemName, orig.itemGroupId, orig.brandId, orig.companyId]
+           WHERE itemName = ? AND (itemGroupId <=> ?) AND (brandId <=> ?)`,
+          [orig.itemName, orig.itemGroupId, orig.brandId]
         );
         for (let i = 0; i < variants.length; i++) {
           const v = variants[i];
           const vals = [
-            newMaster.companyId, newMaster.itemGroupId, newMaster.brandId,
+            newMaster.itemGroupId, newMaster.brandId,
             newMaster.itemName, newMaster.uom, newMaster.hsnCode, newMaster.gst,
             newMaster.hasDemoInstallation, newMaster.isActive,
             ...(hasDesc ? [newMaster.description] : []),
@@ -756,11 +742,11 @@ export const updateItem = async (req, res) => {
     });
 
     if (updates.length) {
-      values.push(orig.itemName, orig.itemGroupId, orig.brandId, orig.companyId);
+      values.push(orig.itemName, orig.itemGroupId, orig.brandId);
       await db.query(
         `UPDATE items
          SET ${updates.join(', ')}, updatedAt = CURRENT_TIMESTAMP
-         WHERE itemName = ? AND (itemGroupId <=> ?) AND (brandId <=> ?) AND (companyId <=> ?)`,
+         WHERE itemName = ? AND (itemGroupId <=> ?) AND (brandId <=> ?)`,
         values
       );
     }
@@ -833,8 +819,8 @@ export const deleteItem = async (req, res) => {
 
     const [siblings] = await db.query(
       `SELECT id FROM items
-       WHERE itemName = ? AND (itemGroupId <=> ?) AND (brandId <=> ?) AND (companyId <=> ?)`,
-      [orig.itemName, orig.itemGroupId, orig.brandId, orig.companyId]
+       WHERE itemName = ? AND (itemGroupId <=> ?) AND (brandId <=> ?)`,
+      [orig.itemName, orig.itemGroupId, orig.brandId]
     );
     const siblingIds = siblings.map((s) => s.id);
 
@@ -870,54 +856,7 @@ export const deleteItem = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────
-// Get Items By Company
-// ─────────────────────────────────────────────
-export const getItemsByCompany = async (req, res) => {
-  try {
-    const { companyId } = req.params;
-    res.set('Cache-Control', 'no-store');
 
-    const [items] = await db.query(
-      `SELECT i.*, ig.name AS itemGroupName, b.name AS brandName
-       FROM items i
-       LEFT JOIN item_groups ig ON i.itemGroupId = ig.id
-       LEFT JOIN brands      b  ON i.brandId     = b.id
-       WHERE (i.companyId = ? OR i.companyId IS NULL)
-         AND i.isActive = 1
-         AND i.sortOrder = 0
-       ORDER BY i.createdAt DESC`,
-      [companyId]
-    );
-
-    if (items.length) {
-      const itemNames = items.map((i) => i.itemName);
-      const [allVariants] = await db.query(
-        `SELECT * FROM items WHERE isActive = 1 AND itemName IN (?) ORDER BY itemName ASC, sortOrder ASC`,
-        [itemNames]
-      );
-      const variantMap = {};
-      for (const v of allVariants) {
-        const key = `${v.itemName}__${v.itemGroupId}__${v.brandId}__${v.companyId}`;
-        if (!variantMap[key]) variantMap[key] = [];
-        variantMap[key].push(v);
-      }
-      const primaryIds = items.map((i) => i.id);
-      const colorMap = await _fetchColorsForItems(primaryIds);
-
-      for (const item of items) {
-        const key = `${item.itemName}__${item.itemGroupId}__${item.brandId}__${item.companyId}`;
-        item.variants = variantMap[key] || [item];
-        item.colors   = colorMap.get(item.id) || [];
-      }
-    }
-
-    return res.status(200).json({ success: true, data: items });
-  } catch (error) {
-    console.error('Get items by company error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to fetch items', error: error.message });
-  }
-};
 
 // ─────────────────────────────────────────────
 // Get Item Images

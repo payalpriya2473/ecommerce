@@ -140,7 +140,6 @@ export const createPurchaseOrder = async (req, res) => {
       sgst, cgst, igst, otherCharges, netAmount,
     } = req.body || {};
 
-    const companyId = req.user?.companyId || req.body?.companyId;
     const createdBy = req.user?.userId || req.user?.id || null;
 
     if (!supplierId || !poDate || items.length === 0) {
@@ -151,12 +150,12 @@ export const createPurchaseOrder = async (req, res) => {
 
     const [result] = await db.query(
       `INSERT INTO purchase_orders
-        (companyId, poNumber, supplierId, poDate, paymentTerms, deliverySchedule,
+        (poNumber, supplierId, poDate, paymentTerms, deliverySchedule,
          transportation, remarks, discountPercent, discountAmount, totalAmount,
          sgst, cgst, igst, otherCharges, netAmount, createdBy)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        companyId, poNumber, supplierId, poDate,
+        poNumber, supplierId, poDate,
         paymentTerms || null, deliverySchedule || null, transportation || null, remarks || null,
         toNum(discountPercent), toNum(discountAmount), toNum(totalAmount),
         toNum(sgst), toNum(cgst), toNum(igst), toNum(otherCharges), toNum(netAmount),
@@ -203,9 +202,6 @@ export const createPurchaseOrder = async (req, res) => {
 // AFTER : LEFT JOIN + GROUP BY + LIMIT/OFFSET pagination
 export const getAllPurchaseOrders = async (req, res) => {
   try {
-    const companyId = req.user?.companyId;
-    const userRole  = req.user?.role;
-
     const page    = parseInt(req.query.page  ?? 1,  10);
     const limit   = parseInt(req.query.limit ?? 50, 10);
     const offset  = (page - 1) * limit;
@@ -214,7 +210,6 @@ export const getAllPurchaseOrders = async (req, res) => {
     // Count
     let countQuery = 'SELECT COUNT(*) AS total FROM purchase_orders po WHERE 1=1';
     const countParams = [];
-    if (userRole !== 'super_admin') { countQuery += ' AND po.companyId = ?'; countParams.push(companyId); }
     const [[{ total }]] = await db.query(countQuery, countParams);
 
     // Data — replace correlated subquery with JOIN + GROUP BY
@@ -238,7 +233,6 @@ export const getAllPurchaseOrders = async (req, res) => {
        WHERE 1=1
     `;
     const params = [];
-    if (userRole !== 'super_admin') { query += ' AND po.companyId = ?'; params.push(companyId); }
     query += ' GROUP BY po.id ORDER BY po.createdAt DESC';
     if (paginate) { query += ' LIMIT ? OFFSET ?'; params.push(limit, offset); }
 
@@ -307,22 +301,19 @@ export const updatePurchaseOrder = async (req, res) => {
     const [existing] = await db.query('SELECT id FROM purchase_orders WHERE id = ?', [id]);
     if (existing.length === 0) return res.status(404).json({ success: false, message: 'Purchase Order not found' });
 
-    const companyId = req.body?.companyId || null;
-
     await db.query(
       `UPDATE purchase_orders SET
         supplierId = ?, poDate = ?, paymentTerms = ?, deliverySchedule = ?,
         transportation = ?, remarks = ?, discountPercent = ?, discountAmount = ?,
         totalAmount = ?, sgst = ?, cgst = ?, igst = ?, otherCharges = ?,
-        netAmount = ?,
-        companyId = COALESCE(?, companyId)
+        netAmount = ?
        WHERE id = ?`,
       [
         supplierId, poDate, paymentTerms || null, deliverySchedule || null,
         transportation || null, remarks || null,
         toNum(discountPercent), toNum(discountAmount), toNum(totalAmount),
         toNum(sgst), toNum(cgst), toNum(igst), toNum(otherCharges),
-        toNum(netAmount), companyId, id,
+        toNum(netAmount), id,
       ]
     );
 
@@ -392,8 +383,6 @@ export const getNextPONumber = async (req, res) => {
 
 export const getPendingQtyByGroup = async (req, res) => {
   try {
-    const companyId   = req.user?.companyId;
-    const userRole    = req.user?.role;
     const excludePoId = req.query?.excludePoId || null;
 
     let query = `
@@ -405,7 +394,6 @@ export const getPendingQtyByGroup = async (req, res) => {
     `;
     const params = [];
 
-    if (userRole !== 'super_admin') { query += ' AND po.companyId = ?'; params.push(companyId); }
     if (excludePoId)                { query += ' AND po.id != ?';       params.push(excludePoId); }
     query += ' GROUP BY i.itemGroupId';
 

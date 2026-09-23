@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import {
-  COMPANY_ID,
   getImageUrl,
   getItemDiscountPercent,
   getItemPrice,
@@ -286,7 +285,6 @@ export default function CartPage() {
       ]);
 
       const productDetails = await publicItemAPI.getAll({
-        companyId: COMPANY_ID || undefined,
         ids: cartProductIds,
         limit: Math.max(cartProductIds.length, 1),
         page: 1,
@@ -311,7 +309,6 @@ export default function CartPage() {
       const recommendationBuckets = await Promise.all(
         categoryIds.map((categoryId) =>
           publicItemAPI.getAll({
-            companyId: COMPANY_ID || undefined,
             categoryId,
             limit: 10,
             page: 1,

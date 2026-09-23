@@ -31,9 +31,11 @@ const PERMISSION_DEFS = [
   ['roles',             FULL],
   ['invoice_settings',  ['view', 'edit']],
   ['reports',           ['view']],
-  ['colors',            FULL],
+  // Temporarily disabled: Colour Master permissions.
+  // ['colors',            FULL],
   ['sales',             ['view', 'create', 'update', 'delete']],
-  ['finance_companies', FULL],
+  // Temporarily disabled: Finance Companies permissions.
+  // ['finance_companies', FULL],
   ['live_stock',        FULL],
 ];
 

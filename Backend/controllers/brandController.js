@@ -7,24 +7,16 @@ import fs from 'fs';
 // ─────────────────────────────────────────────
 export const registerBrand = async (req, res) => {
   try {
-    const { companyId, name, removeIcon } = req.body;
+    const { name, removeIcon } = req.body;
     const iconFile = req.file;
 
     if (!name) {
       return res.status(400).json({ success: false, message: 'Brand name is required' });
     }
 
-    if (companyId) {
-      const [company] = await db.query('SELECT id FROM companies WHERE id = ?', [companyId]);
-      if (company.length === 0) {
-        return res.status(404).json({ success: false, message: 'Company not found' });
-      }
-    }
-
     const [existing] = await db.query(
-      'SELECT id FROM brands WHERE name = ? AND isActive = 1' +
-        (companyId ? ' AND companyId = ?' : ' AND companyId IS NULL'),
-      companyId ? [name.trim(), companyId] : [name.trim()]
+      'SELECT id FROM brands WHERE name = ? AND isActive = 1',
+      [name.trim()]
     );
     if (existing.length > 0) {
       return res.status(400).json({ success: false, message: 'A brand with this name already exists' });
@@ -33,12 +25,12 @@ export const registerBrand = async (req, res) => {
     const iconUrl = iconFile ? `/uploads/brands/${iconFile.filename}` : null;
 
     const [result] = await db.query(
-      `INSERT INTO brands (companyId, name, iconUrl) VALUES (?, ?, ?)`,
-      [companyId || null, name.trim(), iconUrl]
+      `INSERT INTO brands (name, iconUrl) VALUES (?, ?)`,
+      [name.trim(), iconUrl]
     );
 
     const [newBrand] = await db.query(
-      `SELECT b.*, co.name AS companyName FROM brands b LEFT JOIN companies co ON b.companyId = co.id WHERE b.id = ?`,
+      `SELECT b.* FROM brands b WHERE b.id = ?`,
       [result.insertId]
     );
 
@@ -56,7 +48,7 @@ export const getAllBrands = async (req, res) => {
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
 
-    const { companyId, search, page, limit, sortKey, sortDirection } = req.query;
+    const { search, page, limit, sortKey, sortDirection } = req.query;
 
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
     const pageSize = Math.max(1, parseInt(limit, 10) || 25);
@@ -75,26 +67,21 @@ export const getAllBrands = async (req, res) => {
 
     const baseFrom = `
       FROM brands b
-      LEFT JOIN companies co ON b.companyId = co.id
     `;
     const whereClauses = ['b.isActive = 1'];
     const params = [];
 
-    if (companyId) {
-      whereClauses.push('b.companyId = ?');
-      params.push(companyId);
-    }
     if (search) {
       const term = `%${search}%`;
-      whereClauses.push("(b.name LIKE ? OR COALESCE(co.name, '') LIKE ?)");
-      params.push(term, term);
+      whereClauses.push('b.name LIKE ?');
+      params.push(term);
     }
 
     const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
     const orderSql = `ORDER BY ${resolvedSortField} ${resolvedSortDirection}`;
 
     let query = `
-      SELECT b.*, co.name AS companyName
+      SELECT b.*
       ${baseFrom}
       ${whereSql}
       ${orderSql}
@@ -133,9 +120,8 @@ export const getBrandById = async (req, res) => {
     const { id } = req.params;
 
     const [brand] = await db.query(
-      `SELECT b.*, co.name AS companyName
+      `SELECT b.*
        FROM brands b
-       LEFT JOIN companies co ON b.companyId = co.id
        WHERE b.id = ?`,
       [id]
     );
@@ -192,7 +178,7 @@ export const updateBrand = async (req, res) => {
     );
 
     const [updated] = await db.query(
-      `SELECT b.*, co.name AS companyName FROM brands b LEFT JOIN companies co ON b.companyId = co.id WHERE b.id = ?`,
+      `SELECT b.* FROM brands b WHERE b.id = ?`,
       [id]
     );
 
@@ -227,24 +213,3 @@ export const deleteBrand = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────
-// Get brands by company ID
-// ─────────────────────────────────────────────
-export const getBrandsByCompany = async (req, res) => {
-  try {
-    const { companyId } = req.params;
-
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.set('Pragma', 'no-cache');
-
-    const [brands] = await db.query(
-      'SELECT * FROM brands WHERE companyId = ? AND isActive = 1 ORDER BY createdAt DESC',
-      [companyId]
-    );
-
-    return res.status(200).json({ success: true, data: brands });
-  } catch (error) {
-    console.error('Get brands by company error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to fetch brands', error: error.message });
-  }
-};
