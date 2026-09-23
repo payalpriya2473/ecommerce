@@ -14,10 +14,12 @@ import {
   getItemDiscountPercent,
   getItemOfferPrice,
   getItemOriginalPrice,
+  getItemCardKey,
   publicCategoryAPI,
   publicItemAPI,
   slugifyCategoryName,
 } from "@/lib/api/publicApi";
+import { buildProductDetailUrlForItem } from "@/lib/product/variant-utils";
 import { cartItemFromItem, useCart } from "@/lib/cart/cart-context";
 import { useWishlist, wishlistItemFromItem } from "@/lib/wishlist/wishlist-context";
 import "./Searchpage.css";
@@ -406,7 +408,7 @@ export default function SearchPage() {
   }
 
   async function handleShare(item: Item) {
-    const url = `${window.location.origin}/product?id=${item.id}`;
+    const url = `${window.location.origin}${buildProductDetailUrlForItem(item, item.primaryImage ?? null)}`;
     try {
       await navigator.clipboard.writeText(url);
       showToast(`${item.itemName} link copied`);
@@ -569,12 +571,12 @@ export default function SearchPage() {
     const price    = getItemOfferPrice(item);
     const mrp      = getDerivedMrp(item);
     const disc     = getDiscount(item);
-    const wished   = hasItem(item.id);
+    const wished   = hasItem(getItemCardKey(item));
     const inCompare = compareList.includes(itemId);
-    const productHref = `/product?id=${encodeURIComponent(String(item.id))}`;
+    const productHref = buildProductDetailUrlForItem(item, item.primaryImage ?? null);
 
     return (
-      <div key={item.id} className="srp-product-card">
+      <div key={getItemCardKey(item)} className="srp-product-card">
         {/* badge */}
         <div className="srp-card-badge-row">
           {disc > 0 ? <span className="srp-card-badge">-{disc}%</span> : null}
@@ -600,7 +602,7 @@ export default function SearchPage() {
             />
           </Link>
           <div className="srp-card-overlay">
-            <button className="srp-overlay-action" type="button" onClick={() => setQuickViewItem(item)}>
+            <button className="srp-overlay-action" type="button" aria-label="View product" onClick={() => router.push(productHref)}>
               <i className="fas fa-eye" />
             </button>
             <button className="srp-overlay-action" type="button" onClick={() => toggleCompare(item)}>
@@ -697,12 +699,12 @@ export default function SearchPage() {
     const price     = getItemOfferPrice(item);
     const mrp       = getDerivedMrp(item);
     const disc      = getDiscount(item);
-    const wished    = hasItem(item.id);
+    const wished    = hasItem(getItemCardKey(item));
     const inCompare = compareList.includes(itemId);
-    const productHref = `/product?id=${encodeURIComponent(String(item.id))}`;
+    const productHref = buildProductDetailUrlForItem(item, item.primaryImage ?? null);
 
     return (
-      <div key={item.id} className="srp-list-card">
+      <div key={getItemCardKey(item)} className="srp-list-card">
         <div className="srp-list-img">
           {disc > 0 ? (
             <div className="srp-card-badge" style={{ position: "absolute", top: 8, left: 8 }}>
@@ -770,9 +772,9 @@ export default function SearchPage() {
               <button
                 className="srp-btn-wish"
                 type="button"
-                onClick={() => setQuickViewItem(item)}
+                onClick={() => router.push(productHref)}
               >
-                <i className="fas fa-eye" />Quick View
+                <i className="fas fa-eye" />View Product
               </button>
               <button
                 className={`srp-btn-wish${inCompare ? " active" : ""}`}
@@ -1119,7 +1121,7 @@ export default function SearchPage() {
                   <button
                     className="srp-qv-btn-detail"
                     type="button"
-                    onClick={() => router.push(`/product?id=${quickViewItem.id}`)}
+                    onClick={() => router.push(buildProductDetailUrlForItem(quickViewItem, quickViewItem.primaryImage ?? null))}
                   >
                     <i className="fas fa-arrow-right" />View Full Details
                   </button>

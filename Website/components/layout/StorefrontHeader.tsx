@@ -19,7 +19,8 @@ import { useCart } from "@/lib/cart/cart-context";
 import { useAccount } from "@/lib/account/account-context";
 import { isLoggedIn, onCustomerAuthChange } from "@/lib/api/customerApi";
 import { useTheme } from "@/lib/theme/theme-context";
-import { announcementItems, navLinks } from "@/lib/data/homePageData";
+// announcementItems is only used by the (temporarily disabled) announcement bar.
+import { navLinks } from "@/lib/data/homePageData";
 import "./StorefrontHeader.css";
 
 /**
@@ -335,6 +336,7 @@ export default function StorefrontHeader() {
 
   return (
     <>
+      {/* Temporarily disabled: scrolling announcement bar at the top of the site.
       <div className="sf-ann-bar">
         <div className="sf-ann-track">
           {[...announcementItems, ...announcementItems].map((item, index) => (
@@ -345,6 +347,7 @@ export default function StorefrontHeader() {
           ))}
         </div>
       </div>
+      */}
 
       <header className="sf-site-header">
         <div className="sf-header-top">

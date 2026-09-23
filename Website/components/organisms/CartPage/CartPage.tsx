@@ -7,6 +7,8 @@ import {
   getImageUrl,
   getItemDiscountPercent,
   getItemPrice,
+  getItemCardKey,
+  getItemFamilyKey,
   publicItemAPI,
   type Item,
 } from "@/lib/api/publicApi";
@@ -285,10 +287,13 @@ export default function CartPage() {
       ]);
 
       const productDetails = await publicItemAPI.getAll({
+        exact: true,
         ids: cartProductIds,
         limit: Math.max(cartProductIds.length, 1),
         page: 1,
       });
+
+      const cartFamilies = new Set(productDetails.items.map((item) => getItemFamilyKey(item)));
 
       const categoryIds = Array.from(
         new Set(
@@ -321,11 +326,13 @@ export default function CartPage() {
           recommendationBuckets
             .flatMap((bucket) => bucket.items)
             .filter((item) => !excludedIds.has(String(item.id)))
+            // don't recommend another colour/variant of a product already in the cart
+            .filter((item) => !cartFamilies.has(getItemFamilyKey(item)))
             .filter((item) => {
               const { offerPrice, originalPrice } = getItemPrice(item);
               return safePrice(offerPrice) > 0 || safePrice(originalPrice) > 0;
             })
-            .map((item) => [String(item.id), item])
+            .map((item) => [getItemCardKey(item), item])
         ).values()
       );
 

@@ -163,8 +163,9 @@ export function cartItemFromItem(item: Item): CartItemInput {
     originalPrice,
     categoryName: item.categoryName,
     variant: item.variant,
-    colorId: null,
-    colorName: null,
+    // Product cards carry the colour they represent (Product + Colour = card)
+    colorId: item.selectedColorId ?? null,
+    colorName: item.selectedColorName ?? null,
     gst: item.gst,
   };
 }

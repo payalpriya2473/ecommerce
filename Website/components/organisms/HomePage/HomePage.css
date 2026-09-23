@@ -520,6 +520,15 @@ img { max-width: 100%; display: block; }
   width: max-content;
   animation: marqueeProducts 40s linear infinite;
 }
+/* Too few products to scroll: show each card once, no animation/fade */
+.products-marquee-wrapper.is-static {
+  mask-image: none;
+  -webkit-mask-image: none;
+  overflow-x: auto;
+}
+.products-marquee-wrapper.is-static .products-marquee-track {
+  animation: none;
+}
 
 /* ===== PRODUCT CARD ===== */
 .product-card {

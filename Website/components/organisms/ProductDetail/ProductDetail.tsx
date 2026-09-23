@@ -21,6 +21,8 @@ import {
   Item,
   Category,
   publicOfferAPI,
+  getItemCardKey,
+  getItemFamilyKey,
   type PublicOffer,
 } from "@/lib/api/publicApi";
 import { cartItemFromItem, useCart } from "@/lib/cart/cart-context";
@@ -528,8 +530,11 @@ export default function ProductDetail() {
           limit: 10,
           page: 1,
         });
+        // Related products: other products only (not other colours/variants
+        // of the product being viewed).
+        const currentFamily = getItemFamilyKey(fetchedItem);
         setRelatedItems(
-          relatedRes.items.filter((i) => String(i.id) !== String(fetchedItem.id)).slice(0, 8)
+          relatedRes.items.filter((i) => getItemFamilyKey(i) !== currentFamily).slice(0, 8)
         );
         const allCats = await publicCategoryAPI.getAll();
         const foundCat = allCats.find((c) => String(c.id) === String(catId));
@@ -539,6 +544,7 @@ export default function ProductDetail() {
       if (recentIds.length > 0) {
         const recentRes = await publicItemAPI.getAll({
           ids: recentIds,
+          exact: true,
         });
         setRecentlyViewedItems(recentRes.items.filter((i) => String(i.id) !== String(fetchedItem.id)));
       } else {
@@ -1492,7 +1498,7 @@ export default function ProductDetail() {
                   ]);
                   return (
                     <div
-                      key={rel.id}
+                      key={getItemCardKey(rel)}
                       className="pd-product-card"
                       onClick={() => router.push(buildProductDetailUrlForItem(rel, relImage))}
                       role="button"

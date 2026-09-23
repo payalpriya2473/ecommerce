@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { getImageUrl, Item } from "@/lib/api/publicApi";
 import { buildProductDetailUrlForItem } from "@/lib/product/variant-utils";
@@ -92,11 +93,13 @@ export function ProductCard(
     onToggleWishlist?: () => void;
   }
 ) {
+  const router = useRouter();
   const [localWishlisted, setLocalWishlisted] = useState(false);
   const {
     addToCartLabel = "Add to Cart",
     buyLabel = "Buy",
-    onQuickView,
+    // Quick-view preview is disabled: the eye icon opens the product page.
+    onQuickView: _onQuickView,
     onAddToCart,
     onBuyNow,
     isWishlisted,
@@ -137,8 +140,8 @@ export function ProductCard(
             <button
               className="overlay-btn"
               type="button"
-              aria-label="Quick view"
-              onClick={() => onQuickView?.(p)}
+              aria-label="View product"
+              onClick={() => router.push(href)}
             >
               <i className="fas fa-eye" />
             </button>
@@ -199,7 +202,7 @@ export function ProductCard(
           <img src={imgSrc} alt={p.itemName} loading="lazy" />
         </Link>
         <div className="product-image-overlay">
-          <button className="overlay-btn" type="button" aria-label="Quick view" onClick={() => onQuickView?.()}>
+          <button className="overlay-btn" type="button" aria-label="View product" onClick={() => router.push(href)}>
             <i className="fas fa-eye" />
           </button>
           <button className="overlay-btn" type="button" aria-label="Compare">

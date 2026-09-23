@@ -18,6 +18,7 @@ import {
   Category,
   getCategoryUrl,
   getImageUrl,
+  getItemCardKey,
   Item,
   slugifyCategoryName,
   publicOfferAPI,
@@ -119,7 +120,7 @@ function itemToCard(
   item: Item,
   badge: string,
   badgeType: string,
-): ProductCardData & { itemId: string | number; rawItem: Item } {
+): ProductCardData & { itemId: string | number; cardKey: string; rawItem: Item } {
   return {
     badge,
     badgeType,
@@ -139,9 +140,13 @@ function itemToCard(
     save: item.margin ? `${Math.round(item.margin)}% off` : undefined,
     href: buildProductDetailUrlForItem(item, item.primaryImage ?? null),
     itemId: item.id,
+    cardKey: getItemCardKey(item),
     rawItem: item,
   };
 }
+
+/** Minimum number of product cards before a product row auto-scrolls. */
+const PRODUCT_MARQUEE_MIN = 5;
 
 export default function HomePage() {
   const [slideIndex, setSlideIndex] = useState(0);
@@ -324,8 +329,13 @@ export default function HomePage() {
 
   // Duplicate items for seamless marquee loop
   const catDuplicated = [...categoryCards, ...categoryCards];
-  const flashDuplicated = [...flashItems, ...flashItems];
-  const trendDuplicated = [...trendItems, ...trendItems];
+  // Product rows only scroll (and only get duplicated for the seamless loop)
+  // when there are enough real cards to fill the row. With fewer products each
+  // card is shown exactly once, in a static row.
+  const flashMarquee = flashItems.length >= PRODUCT_MARQUEE_MIN;
+  const trendMarquee = trendItems.length >= PRODUCT_MARQUEE_MIN;
+  const flashDuplicated = flashMarquee ? [...flashItems, ...flashItems] : flashItems;
+  const trendDuplicated = trendMarquee ? [...trendItems, ...trendItems] : trendItems;
   const brandDuplicated = [...brandCards, ...brandCards];
   return (
     <>
@@ -572,20 +582,17 @@ export default function HomePage() {
               </div>
             </div>
           ) : flashItems.length > 0 ? (
-            <div className="products-marquee-wrapper">
+            <div className={`products-marquee-wrapper${flashMarquee ? "" : " is-static"}`}>
               <div className="products-marquee-track">
                 {flashDuplicated.map((p, index) => (
                   <ProductCard
-                    key={`${p.name}-${index}`}
+                    key={`${p.cardKey}-${index}`}
                     product={p}
                     addToCartLabel={pageCopy.addToCart}
                     buyLabel={pageCopy.buyNow}
-                    isWishlisted={hasItem(p.itemId)}
+                    isWishlisted={hasItem(p.cardKey)}
                     onToggleWishlist={() =>
                       toggleItem(wishlistItemFromItem(p.rawItem))
-                    }
-                    onQuickView={(product) =>
-                      setQuickViewProduct(product ?? null)
                     }
                     onAddToCart={() => addItem(cartItemFromItem(p.rawItem))}
                     onBuyNow={() => {
@@ -648,20 +655,17 @@ export default function HomePage() {
             </div>
           </div>
         ) : trendItems.length > 0 ? (
-          <div className="products-marquee-wrapper">
+          <div className={`products-marquee-wrapper${trendMarquee ? "" : " is-static"}`}>
             <div className="products-marquee-track">
               {trendDuplicated.map((p, index) => (
                 <ProductCard
-                  key={`${p.name}-${index}`}
+                  key={`${p.cardKey}-${index}`}
                   product={p}
                   addToCartLabel={pageCopy.addToCart}
                   buyLabel={pageCopy.buyNow}
-                  isWishlisted={hasItem(p.itemId)}
+                  isWishlisted={hasItem(p.cardKey)}
                   onToggleWishlist={() =>
                     toggleItem(wishlistItemFromItem(p.rawItem))
-                  }
-                  onQuickView={(product) =>
-                    setQuickViewProduct(product ?? null)
                   }
                   onAddToCart={() => addItem(cartItemFromItem(p.rawItem))}
                   onBuyNow={() => {

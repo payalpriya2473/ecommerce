@@ -17,6 +17,7 @@ import {
   getItemDiscountPercent,
   getItemOfferPrice,
   getItemOriginalPrice,
+  getItemCardKey,
   Item,
 } from "@/lib/api/publicApi";
 import {
@@ -438,7 +439,7 @@ export default function CategoryPage() {
     const wished      = isWishlisted(item); // ← FIX: color-aware wishlist check
 
     return (
-      <div key={item.id} className="product-card">
+      <div key={getItemCardKey(item)} className="product-card">
         <div className="p-badge-row">
           {disc > 0 && <span className="p-badge sale">-{disc}%</span>}
         </div>
@@ -451,8 +452,9 @@ export default function CategoryPage() {
             <img src={img} alt={item.itemName} />
           </Link>
           <div className="p-image-overlay">
-            <button className="overlay-action" type="button"
-              onClick={() => setQuickViewItem(item)}><i className="fas fa-eye" /></button>
+            {/* Quick-view preview disabled: open the product page directly */}
+            <button className="overlay-action" type="button" aria-label="View product"
+              onClick={() => router.push(itemHref)}><i className="fas fa-eye" /></button>
             <button className="overlay-action" type="button"
               onClick={() => toggleCompare(itemId, item.itemName)}><i className="fas fa-code-compare" /></button>
             <button className="overlay-action" type="button"
@@ -522,7 +524,7 @@ export default function CategoryPage() {
     const wished      = isWishlisted(item); // ← FIX: color-aware wishlist check
 
     return (
-      <div key={item.id} className="product-list-card">
+      <div key={getItemCardKey(item)} className="product-list-card">
         <div className="list-image">
           <Link href={itemHref} className="p-image-link">
             <img src={img} alt={item.itemName} />
@@ -566,8 +568,8 @@ export default function CategoryPage() {
                 <i className={`${wished ? "fas" : "far"} fa-heart`} />Wishlist
               </button>
               <button className="list-secondary-btn" type="button"
-                onClick={() => setQuickViewItem(item)}>
-                <i className="fas fa-eye" />Quick View
+                onClick={() => router.push(itemHref)}>
+                <i className="fas fa-eye" />View Product
               </button>
               <button className={`list-secondary-btn${inCompare ? " active" : ""}`} type="button"
                 onClick={() => toggleCompare(itemId, item.itemName)}>

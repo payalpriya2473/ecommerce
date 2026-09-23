@@ -53,6 +53,16 @@ export interface Item {
   categoryName?: string;
   categoryId?: string | number;
   primaryImage?: string | null;
+  // ── Product-card fields (GET /items without exact=1) ──
+  // One card = one product + one colour; variants are collapsed.
+  cardKey?: string;
+  familyKey?: string;
+  selectedColorId?: string | number | null;
+  selectedColorName?: string | null;
+  variantCount?: number;
+  familyStock?: number;
+  minOfferPrice?: number;
+  variantLabels?: string[];
   colors?: Array<{
     id: string | number | null;
     colorName?: string | null;
@@ -128,6 +138,28 @@ export interface ItemsFilter {
   search?: string;
   page?: number;
   limit?: number;
+  /** true → exact item rows (cart, recently viewed); default → product cards */
+  exact?: boolean;
+}
+
+/** Stable React key / de-dupe key for a product card (product + colour). */
+export function getItemCardKey(
+  item: Pick<Item, "id" | "cardKey" | "selectedColorId">
+): string {
+  if (item.cardKey) return item.cardKey;
+  return item.selectedColorId != null
+    ? `${String(item.id)}::${String(item.selectedColorId)}`
+    : String(item.id);
+}
+
+/** Identifies the product family (all variants of one product). */
+export function getItemFamilyKey(
+  item: Pick<Item, "familyKey" | "itemName" | "itemGroupId" | "brandId">
+): string {
+  return (
+    item.familyKey ??
+    `${item.itemName}__${item.itemGroupId ?? ""}__${item.brandId ?? ""}`
+  );
 }
 
 function toNumber(value: unknown): number {
@@ -333,6 +365,7 @@ export const publicItemAPI = {
     if (filter?.search) params.append("search", filter.search);
     if (filter?.page) params.append("page", String(filter.page));
     if (filter?.limit) params.append("limit", String(filter.limit));
+    if (filter?.exact) params.append("exact", "1");
 
     const qs = params.toString();
     const path = qs ? `/items?${qs}` : "/items";
