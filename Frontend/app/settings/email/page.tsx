@@ -126,6 +126,9 @@ export default function EmailConfigPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Save failed");
+      if (data.smtpSecure) {
+        setConfig((previous) => ({ ...previous, smtpSecure: data.smtpSecure }));
+      }
       showToast("success", data.message);
     } catch (err: any) {
       showToast("error", err.message);
@@ -176,7 +179,7 @@ export default function EmailConfigPage() {
   const securityHint = useMemo(() => {
     if (config.smtpSecure === "ssl") return "Port 465 with SSL";
     if (config.smtpSecure === "tls") return "Port 587 with TLS";
-    // return "Port 25 or custom none";
+    return "Use only with a trusted SMTP server on a custom port";
   }, [config.smtpSecure]);
 
   return (
@@ -328,9 +331,9 @@ export default function EmailConfigPage() {
                             </label>
                           ))}
                         </div>
-                        {/* <p className="mt-2 text-xs text-muted-foreground">
-                          {securityHint} | Port 465 = SSL | Port 587 = TLS | Port 25 = none
-                        </p> */}
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {securityHint}. Port 587 is automatically saved with TLS; port 465 uses SSL.
+                        </p>
                       </div>
                     </div>
                   </SettingCard>
@@ -470,9 +473,9 @@ export default function EmailConfigPage() {
                       <h2 className="text-base font-semibold text-foreground">Test Email</h2>
                     </div>
                     <div className="px-6 py-5">
-                      {/* <p className="mb-4 text-sm text-muted-foreground">
-                        Save the settings first, then send a test message to verify SMTP delivery.
-                      </p> */}
+                      <p className="mb-4 text-sm text-muted-foreground">
+                        A successful test means your SMTP provider accepted the message. Also check the recipient&apos;s Spam folder.
+                      </p>
                       <div className="space-y-3">
                         <input
                           type="email"

@@ -5,6 +5,23 @@ function normalizeEmail(value = "") {
   return String(value).trim().toLowerCase();
 }
 
+function isValidEmail(value) {
+  // This deliberately stays small: it prevents malformed addresses and header
+  // injection without rejecting valid, less-common email addresses.
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
+}
+
+function normalizeSmtpSecurity({ smtp_port, smtp_secure }) {
+  const port = Number(smtp_port);
+  const security = String(smtp_secure || "").toLowerCase();
+
+  // 465 is implicit TLS; 587 is STARTTLS.  In particular, never allow an old
+  // "none" setting to silently make a Gmail/587 connection insecure.
+  if (port === 465) return "ssl";
+  if (port === 587) return "tls";
+  return ["none", "tls", "ssl"].includes(security) ? security : "tls";
+}
+
 function domainMatches(email, patterns) {
   const normalized = normalizeEmail(email);
   if (!normalized || !normalized.includes("@")) return false;
@@ -55,17 +72,17 @@ function resolveSmtpAuthUser(cfg) {
 
 function buildTransportOptions(cfg) {
   const authUser = resolveSmtpAuthUser(cfg);
+  const security = normalizeSmtpSecurity(cfg);
 
   return {
     host: cfg.smtp_host,
-    port: cfg.smtp_port,
-    secure: cfg.smtp_secure === "ssl",
-    requireTLS: cfg.smtp_secure === "tls",
+    port: Number(cfg.smtp_port),
+    secure: security === "ssl",
+    requireTLS: security === "tls",
     auth: {
       user: authUser,
       pass: cfg.smtp_password,
     },
-    tls: cfg.smtp_secure === "none" ? { rejectUnauthorized: false } : undefined,
   };
 }
 
@@ -79,7 +96,9 @@ export const getEmailConfig = async (req, res) => {
     res.json({
       smtpHost: r.smtp_host,
       smtpPort: r.smtp_port,
-      smtpSecure: r.smtp_secure,
+      // Show the effective setting, including a safe correction for legacy
+      // configurations that stored `none` with port 587.
+      smtpSecure: normalizeSmtpSecurity(r),
       smtpUser: r.smtp_user,
       smtpPassword: r.smtp_password ? "••••••••" : "",
       fromName: r.from_name,
@@ -98,13 +117,35 @@ export const saveEmailConfig = async (req, res) => {
     const { smtpHost, smtpPort, smtpSecure, smtpUser, smtpPassword, fromName, fromEmail, isActive } =
       req.body;
 
+    const hostToSave = String(smtpHost || "").trim();
+    const suppliedPort = String(smtpPort ?? "").trim();
+    const portToSave = suppliedPort ? Number(suppliedPort) : 587;
+    const userToSave = String(smtpUser || "").trim() || String(fromEmail || "").trim();
+    const fromEmailToSave = String(fromEmail || "").trim();
+
+    if (!hostToSave || !userToSave) {
+      return res.status(400).json({ message: "SMTP host and username are required." });
+    }
+    if (!Number.isInteger(portToSave) || portToSave < 1 || portToSave > 65535) {
+      return res.status(400).json({ message: "SMTP port must be between 1 and 65535." });
+    }
+    if (!isValidEmail(userToSave)) {
+      return res.status(400).json({ message: "Enter a valid SMTP username/email address." });
+    }
+    if (fromEmailToSave && !isValidEmail(fromEmailToSave)) {
+      return res.status(400).json({ message: "Enter a valid From Email address." });
+    }
+
     let passwordToSave = smtpPassword;
     if (!smtpPassword || smtpPassword === "••••••••") {
       const [existing] = await pool.query("SELECT smtp_password FROM email_config WHERE id = 1");
       passwordToSave = existing[0]?.smtp_password || "";
     }
 
-    const userToSave = String(smtpUser || "").trim() || String(fromEmail || "").trim();
+    const securityToSave = normalizeSmtpSecurity({
+      smtp_port: portToSave,
+      smtp_secure: smtpSecure,
+    });
 
     await pool.query(
       `UPDATE email_config SET
@@ -113,18 +154,24 @@ export const saveEmailConfig = async (req, res) => {
         from_name = ?, from_email = ?, is_active = ?
       WHERE id = 1`,
       [
-        smtpHost || "",
-        parseInt(smtpPort) || 587,
-        smtpSecure || "tls",
+        hostToSave,
+        portToSave,
+        securityToSave,
         userToSave,
         passwordToSave,
         fromName || "AppleNext Enterprise Suite",
-        fromEmail || "",
+        fromEmailToSave,
         isActive ? 1 : 0,
       ],
     );
 
-    res.json({ message: "Email configuration saved successfully" });
+    res.json({
+      message:
+        portToSave === 587 && String(smtpSecure).toLowerCase() !== "tls"
+          ? "Email configuration saved. TLS was enabled automatically for port 587."
+          : "Email configuration saved successfully",
+      smtpSecure: securityToSave,
+    });
   } catch (err) {
     console.error("saveEmailConfig error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
@@ -132,7 +179,7 @@ export const saveEmailConfig = async (req, res) => {
 };
 
 function buildProfessionalTestEmail(cfg) {
-  const security = String(cfg.smtp_secure || "").toUpperCase() || "N/A";
+  const security = normalizeSmtpSecurity(cfg).toUpperCase();
   const sender = `${cfg.from_name} <${cfg.from_email || cfg.smtp_user}>`;
   const server = `${cfg.smtp_host}:${cfg.smtp_port}`;
 
@@ -184,8 +231,10 @@ function buildProfessionalTestEmail(cfg) {
 // POST /api/settings/email/test
 export const testEmailConfig = async (req, res) => {
   try {
-    const { toEmail } = req.body;
-    if (!toEmail) return res.status(400).json({ message: "Test email address required" });
+    const toEmail = String(req.body.toEmail || "").trim();
+    if (!isValidEmail(toEmail)) {
+      return res.status(400).json({ message: "Enter a valid test email address." });
+    }
 
     const [rows] = await pool.query("SELECT * FROM email_config WHERE id = 1");
     if (!rows.length) return res.status(404).json({ message: "Email config not found" });
@@ -200,14 +249,27 @@ export const testEmailConfig = async (req, res) => {
     const transporter = nodemailer.createTransport(buildTransportOptions(cfg));
     await transporter.verify();
 
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: `"${cfg.from_name}" <${cfg.from_email || cfg.smtp_user}>`,
       to: toEmail,
       subject: "AppleNext Enterprise Suite | SMTP Test Email",
       html: buildProfessionalTestEmail(cfg),
     });
 
-    res.json({ message: `Test email sent successfully to ${toEmail}` });
+    if (!info.accepted?.length || info.rejected?.length) {
+      return res.status(502).json({
+        message: `The SMTP server did not accept delivery to ${toEmail}. ${
+          info.response || "Check the recipient address and SMTP account."
+        }`,
+      });
+    }
+
+    // SMTP acceptance means the provider has queued the message; it does not
+    // guarantee Inbox placement, which Gmail's spam filters decide later.
+    res.json({
+      message: `SMTP accepted the test email for delivery to ${toEmail}. Check Inbox and Spam.`,
+      messageId: info.messageId,
+    });
   } catch (err) {
     console.error("testEmailConfig error:", err);
     let errorMsg = err.message;
