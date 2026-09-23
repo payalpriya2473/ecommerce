@@ -173,7 +173,127 @@ router.get("/brands/:id", async (req, res) => {
 // ITEMS / PRODUCTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// CHANGE 1: /items listing now includes primaryImage from color system
+// ─── Product-card helpers ────────────────────────────────────────────────────
+// Storefront rule:  Product + Color = one product card.
+//  • Rows in `items` that share itemName + itemGroupId + brandId are VARIANTS of
+//    one product (e.g. 128GB / 256GB). They never create extra cards — the
+//    variant is picked on the product details page.
+//  • Every distinct colour of a product (item_variant_colors, matched by name
+//    across variants) becomes its own card, using that colour's image.
+//  • A product with no colours gets exactly one card.
+
+function familyKeyOf(row) {
+  return `${row.itemName}__${row.itemGroupId ?? ""}__${row.brandId ?? ""}`;
+}
+
+function colorKeyOf(color) {
+  const name = String(color.colorName ?? "").trim().toLowerCase();
+  return name ? `name:${name}` : `id:${color.id}`;
+}
+
+/** Load active colours (with first image) for a set of item row ids. */
+async function loadColorsByItem(itemIds) {
+  const colorMap = {};
+  if (!itemIds.length) return colorMap;
+
+  const [colorRows] = await db.query(
+    `SELECT
+       ivc.itemId,
+       ivc.id        AS colorId,
+       ivc.colorName,
+       ivc.colorHex,
+       ivc.sortOrder,
+       (
+         SELECT imageUrl FROM item_variant_images
+         WHERE itemVariantColorId = ivc.id
+         ORDER BY sortOrder ASC LIMIT 1
+       ) AS firstImage
+     FROM item_variant_colors ivc
+     WHERE ivc.itemId IN (?) AND ivc.isActive = 1
+     ORDER BY ivc.itemId ASC, ivc.sortOrder ASC, ivc.id ASC`,
+    [itemIds]
+  );
+
+  for (const cr of colorRows) {
+    if (!colorMap[cr.itemId]) colorMap[cr.itemId] = [];
+    colorMap[cr.itemId].push({
+      id:           cr.colorId,
+      colorName:    cr.colorName,
+      colorHex:     cr.colorHex,
+      sortOrder:    cr.sortOrder,
+      primaryImage: imgUrl(cr.firstImage),
+    });
+  }
+  return colorMap;
+}
+
+/**
+ * Turn variant rows (already ordered by sortOrder) into product cards:
+ * one per product + colour, or one per product when it has no colours.
+ */
+function buildProductCards(rows, colorMap) {
+  const families = new Map();
+  for (const row of rows) {
+    const key = familyKeyOf(row);
+    if (!families.has(key)) families.set(key, []);
+    families.get(key).push(row);
+  }
+
+  const cards = [];
+  for (const [familyKey, familyRows] of families) {
+    const variants = [...familyRows].sort(
+      (a, b) => (Number(a.sortOrder) - Number(b.sortOrder)) || (Number(a.id) - Number(b.id))
+    );
+    const variantCount = variants.length;
+    const familyStock = variants.reduce((sum, v) => sum + (Number(v.openingStock) || 0), 0);
+    const prices = variants.map((v) => Number(v.offerPrice) || 0).filter((p) => p > 0);
+    const minOfferPrice = prices.length ? Math.min(...prices) : 0;
+    const variantLabels = variants.map((v) => v.variant).filter(Boolean);
+
+    const familyInfo = { familyKey, variantCount, familyStock, minOfferPrice, variantLabels };
+
+    // Distinct colours across the whole family; first variant that has the
+    // colour (lowest sortOrder) is the one the card opens / prices with.
+    const seen = new Set();
+    for (const variant of variants) {
+      const variantColors = colorMap[variant.id] || [];
+      for (const color of variantColors) {
+        const ck = colorKeyOf(color);
+        if (seen.has(ck)) continue;
+        seen.add(ck);
+        cards.push({
+          ...variant,
+          ...familyInfo,
+          primaryImage: color.primaryImage || imgUrl(variant.legacyPrimaryImage),
+          // selected colour first so every "resolve colour from image" helper
+          // on the website lands on this card's colour
+          colors: [color, ...variantColors.filter((c) => c.id !== color.id)],
+          selectedColorId: color.id,
+          selectedColorName: color.colorName,
+          cardKey: `${variant.id}::${color.id}`,
+        });
+      }
+    }
+
+    if (!seen.size) {
+      const base = variants[0];
+      cards.push({
+        ...base,
+        ...familyInfo,
+        primaryImage: imgUrl(base.legacyPrimaryImage),
+        colors: [],
+        selectedColorId: null,
+        selectedColorName: null,
+        cardKey: String(base.id),
+      });
+    }
+  }
+  return cards;
+}
+
+// GET /items
+//   default      → product cards (Product + Colour), variants collapsed
+//   ?exact=1     → the exact item rows requested (cart / recently viewed)
 router.get("/items", async (req, res) => {
   try {
     const {
@@ -185,8 +305,11 @@ router.get("/items", async (req, res) => {
       page = 1,
       limit = 20,
     } = req.query;
+    const exact = req.query.exact === "1" || req.query.exact === "true";
 
-    const offset = (Number(page) - 1) * Number(limit);
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 20);
+    const offset = (pageNum - 1) * limitNum;
     const conditions = ["i.isActive = 1"];
     const params = [];
 
@@ -206,32 +329,35 @@ router.get("/items", async (req, res) => {
       conditions.push("(i.itemName LIKE ? OR b.name LIKE ?)");
       params.push(`%${search}%`, `%${search}%`);
     }
-    // Filter to an explicit set of product IDs (e.g. products linked to a
-    // specific offer via offer_products) — comma-separated list.
+    // Explicit set of product IDs (offer products, cart, recently viewed).
     if (idsFilterParam) {
       const idList = String(idsFilterParam)
         .split(",")
         .map((v) => v.trim())
         .filter(Boolean);
       if (idList.length) {
-        conditions.push("i.id IN (?)");
+        if (exact) {
+          conditions.push("i.id IN (?)");
+        } else {
+          // Card mode: an id selects its whole product family, which is then
+          // collapsed to one card per colour below.
+          conditions.push(
+            `EXISTS (
+               SELECT 1 FROM items sel
+               WHERE sel.id IN (?)
+                 AND sel.itemName = i.itemName
+                 AND (sel.itemGroupId <=> i.itemGroupId)
+                 AND (sel.brandId <=> i.brandId)
+             )`
+          );
+        }
         params.push(idList);
       }
     }
 
     const where = conditions.join(" AND ");
-
-    const [[{ total }]] = await db.query(
-      `SELECT COUNT(*) AS total
-       FROM items i
-       LEFT JOIN item_groups ig ON ig.id = i.itemGroupId
-       LEFT JOIN brands b       ON b.id  = i.brandId
-       WHERE ${where}`,
-      params
-    );
-
-    const [rows] = await db.query(
-      `SELECT
+    const selectSql = `
+      SELECT
          i.*,
          b.name   AS brandName,
          ig.name  AS itemGroupName,
@@ -248,57 +374,47 @@ router.get("/items", async (req, res) => {
        LEFT JOIN item_groups ig  ON ig.id  = i.itemGroupId
        LEFT JOIN categories  cat ON cat.id = ig.categoryId
        LEFT JOIN brands      b   ON b.id   = i.brandId
-       WHERE ${where}
-       ORDER BY i.sortOrder ASC, i.itemName ASC
-       LIMIT ? OFFSET ?`,
-      [...params, Number(limit), offset]
-    );
+       WHERE ${where}`;
 
-    // ── Attach color primary images from new color system ─────────────────────
-    const ids = rows.map((r) => r.id);
-    let colorMap = {};
-
-    if (ids.length) {
-      const [colorRows] = await db.query(
-        `SELECT
-           ivc.itemId,
-           ivc.id        AS colorId,
-           ivc.colorName,
-           ivc.colorHex,
-           ivc.sortOrder,
-           (
-             SELECT imageUrl FROM item_variant_images
-             WHERE itemVariantColorId = ivc.id
-             ORDER BY sortOrder ASC LIMIT 1
-           ) AS firstImage
-         FROM item_variant_colors ivc
-         WHERE ivc.itemId IN (?) AND ivc.isActive = 1
-         ORDER BY ivc.itemId ASC, ivc.sortOrder ASC`,
-        [ids]
+    // ── Exact rows (no grouping) ──────────────────────────────────────────────
+    if (exact) {
+      const [[{ total }]] = await db.query(
+        `SELECT COUNT(*) AS total
+         FROM items i
+         LEFT JOIN item_groups ig ON ig.id = i.itemGroupId
+         LEFT JOIN brands b       ON b.id  = i.brandId
+         WHERE ${where}`,
+        params
       );
-
-      for (const cr of colorRows) {
-        if (!colorMap[cr.itemId]) colorMap[cr.itemId] = [];
-        colorMap[cr.itemId].push({
-          id:          cr.colorId,
-          colorName:   cr.colorName,
-          colorHex:    cr.colorHex,
-          sortOrder:   cr.sortOrder,
-          // Use new color image; fall back to legacy
-          primaryImage: imgUrl(cr.firstImage),
-        });
-      }
+      const [rows] = await db.query(
+        `${selectSql}
+         ORDER BY i.sortOrder ASC, i.itemName ASC
+         LIMIT ? OFFSET ?`,
+        [...params, limitNum, offset]
+      );
+      const colorMap = await loadColorsByItem(rows.map((r) => r.id));
+      const mapped = rows.map((r) => ({
+        ...r,
+        primaryImage: colorMap[r.id]?.[0]?.primaryImage || imgUrl(r.legacyPrimaryImage),
+        colors: colorMap[r.id] || [],
+      }));
+      return paginated(res, mapped, { total, page: pageNum, limit: limitNum });
     }
 
-    const mapped = rows.map((r) => ({
-      ...r,
-      // Prefer color system image; fall back to legacy item_images
-      primaryImage:
-        colorMap[r.id]?.[0]?.primaryImage || imgUrl(r.legacyPrimaryImage),
-      colors: colorMap[r.id] || [],
-    }));
+    // ── Product cards: Product + Colour, variants collapsed ──────────────────
+    // Families are ordered by their base variant (sortOrder 0 first), then name;
+    // inside a family variants stay in sortOrder so the base variant leads.
+    const [rows] = await db.query(
+      `${selectSql}
+       ORDER BY i.sortOrder ASC, i.itemName ASC, i.id ASC`,
+      params
+    );
+    const colorMap = await loadColorsByItem(rows.map((r) => r.id));
+    const cards = buildProductCards(rows, colorMap);
+    const total = cards.length;
+    const pageCards = cards.slice(offset, offset + limitNum);
 
-    return paginated(res, mapped, { total, page, limit: Number(limit) });
+    return paginated(res, pageCards, { total, page: pageNum, limit: limitNum });
   } catch (e) {
     return serverErr(res, e);
   }
@@ -568,15 +684,35 @@ router.get("/search", async (req, res) => {
 
     const like = `%${q}%`;
 
-    const [items] = await db.query(
+    // One suggestion per product family (variants such as 128GB / 256GB
+    // are not listed separately) — the base variant represents the product.
+    const [itemRows] = await db.query(
       `SELECT i.id, i.itemName, i.brandId, b.name AS brandName,
-              (SELECT imageUrl FROM item_images WHERE itemId = i.id ORDER BY sortOrder LIMIT 1) AS primaryImage
+              COALESCE(
+                (SELECT ivi.imageUrl
+                   FROM item_variant_colors ivc
+                   JOIN item_variant_images ivi ON ivi.itemVariantColorId = ivc.id
+                  WHERE ivc.itemId = i.id AND ivc.isActive = 1
+                  ORDER BY ivc.sortOrder ASC, ivi.sortOrder ASC LIMIT 1),
+                (SELECT imageUrl FROM item_images WHERE itemId = i.id ORDER BY sortOrder LIMIT 1)
+              ) AS primaryImage
        FROM items i
        LEFT JOIN brands b ON b.id = i.brandId
        WHERE i.isActive = 1 AND i.itemName LIKE ?
+         AND i.id = (
+           SELECT v.id FROM items v
+            WHERE v.isActive = 1
+              AND v.itemName = i.itemName
+              AND (v.itemGroupId <=> i.itemGroupId)
+              AND (v.brandId <=> i.brandId)
+            ORDER BY v.sortOrder ASC, v.id ASC
+            LIMIT 1
+         )
+       ORDER BY i.itemName ASC
        LIMIT ?`,
       [like, Number(limit)]
     );
+    const items = itemRows.map((r) => ({ ...r, primaryImage: imgUrl(r.primaryImage) }));
 
     const [categories] = await db.query(
       `SELECT id, name,
