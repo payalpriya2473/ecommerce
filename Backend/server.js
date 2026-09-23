@@ -189,9 +189,14 @@ router.use("/api/designations", designationRoutes);
 router.use("/api/employees", employeeRoutes);
 // Uploaded images/icons. Multer writes to "<cwd>/uploads/..."; also serve
 // "<Backend folder>/uploads" in case PM2/node is started from another folder.
-router.use("/uploads", express.static(path.resolve(process.cwd(), "uploads"), { maxAge: "7d" }));
-if (path.resolve(BACKEND_DIR, "uploads") !== path.resolve(process.cwd(), "uploads")) {
-  router.use("/uploads", express.static(path.resolve(BACKEND_DIR, "uploads"), { maxAge: "7d" }));
+// Served at BOTH "/uploads" and "/api/uploads": the live nginx only forwards
+// "/api/..." to this server, so the frontends load images via "/api/uploads/...".
+const uploadRoots = [path.resolve(process.cwd(), "uploads")];
+if (path.resolve(BACKEND_DIR, "uploads") !== uploadRoots[0]) uploadRoots.push(path.resolve(BACKEND_DIR, "uploads"));
+for (const mount of ["/uploads", "/api/uploads"]) {
+  for (const dir of uploadRoots) {
+    router.use(mount, express.static(dir, { maxAge: "7d" }));
+  }
 }
 router.use('/api/rbac', rbacRoutes);
 router.use('/api/suppliers', supplierRoutes);
