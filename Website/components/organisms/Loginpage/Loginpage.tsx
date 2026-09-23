@@ -375,7 +375,8 @@ export default function LoginPage() {
 
   return (
     <div className="lp-root">
-      <div className="lp-page-wrap">
+      <div className="lp-page-wrap lp-page-wrap--single">
+        {/* Temporarily disabled: left promo panel (brand, headline, perks).
         <div className="lp-left-panel">
           <div className="lp-orb lp-orb-1" /><div className="lp-orb lp-orb-2" /><div className="lp-orb lp-orb-3" />
           <div className="lp-left-content">
@@ -392,6 +393,7 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
+        */}
 
         <div className="lp-right-panel">
           <div className="lp-form-container">
@@ -407,11 +409,13 @@ export default function LoginPage() {
               <div className="lp-form-panel">
                 <div className="lp-form-title">Welcome back!</div>
                 <div className="lp-form-subtitle">Sign in to your AppleNext account to continue</div>
+                {/* Temporarily disabled: Google / Facebook sign-in buttons.
                 <div className="lp-social-row">
                   <button className="lp-social-btn" onClick={() => socialLogin("google")}><i className="fab fa-google lp-g-icon" /> Continue with Google</button>
                   <button className="lp-social-btn" onClick={() => socialLogin("facebook")}><i className="fab fa-facebook lp-fb-icon" /> Facebook</button>
                 </div>
                 <div className="lp-divider"><span>or sign in with email / mobile</span></div>
+                */}
                 <div className="lp-fg">
                   <label><i className="fas fa-envelope" /> Email or Mobile Number <span className="lp-req">*</span></label>
                   <div className="lp-input-wrap">
@@ -446,11 +450,13 @@ export default function LoginPage() {
               <div className="lp-form-panel">
                 <div className="lp-form-title">Create Account</div>
                 <div className="lp-form-subtitle">Join AppleNext and get Rs 200 off your first order!</div>
+                {/* Temporarily disabled: Google / Facebook sign-up buttons.
                 <div className="lp-social-row">
                   <button className="lp-social-btn" onClick={() => socialLogin("google")}><i className="fab fa-google lp-g-icon" /> Sign up with Google</button>
                   <button className="lp-social-btn" onClick={() => socialLogin("facebook")}><i className="fab fa-facebook lp-fb-icon" /> Facebook</button>
                 </div>
                 <div className="lp-divider"><span>or register with email</span></div>
+                */}
                 <div className="lp-row-2">
                   <div className="lp-fg">
                     <label>First Name <span className="lp-req">*</span></label>

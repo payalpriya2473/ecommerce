@@ -207,3 +207,46 @@
   .lp-left-panel { display: none; }
   .lp-right-panel { padding: 32px 24px; }
 }
+/* ===== SINGLE-COLUMN LAYOUT (promo panel removed) =====
+   The form sits in one centred, elevated card on a soft branded backdrop,
+   so there is no empty half-page. */
+.lp-page-wrap--single {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: auto;
+  padding: 56px 20px 72px;
+  background:
+    radial-gradient(900px 380px at 50% -120px, var(--brand-tint), transparent 70%),
+    var(--gray50);
+}
+.lp-page-wrap--single .lp-right-panel {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  padding: 40px 44px 36px;
+  background: var(--white);
+  border: 1px solid var(--gray200);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, .04),
+    0 24px 48px -12px rgba(0, 0, 0, .12);
+  overflow: hidden;
+}
+/* thin brand accent along the top edge of the card */
+.lp-page-wrap--single .lp-right-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+}
+.lp-page-wrap--single .lp-form-container { max-width: none; }
+.lp-page-wrap--single .lp-tab-switcher { margin-bottom: 28px; }
+.lp-page-wrap--single .lp-form-title { font-size: 1.5rem; }
+.lp-page-wrap--single .lp-form-subtitle { margin-bottom: 24px; }
+
+@media (max-width: 560px) {
+  .lp-page-wrap--single { padding: 24px 12px 40px; }
+  .lp-page-wrap--single .lp-right-panel { padding: 28px 20px 24px; border-radius: var(--radius-lg); }
+}
