@@ -1,4 +1,5 @@
 "use client"
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -102,10 +103,7 @@ function parseBoolean(value: boolean | number | string | undefined) {
 }
 
 export function toAssetUrl(url?: string | null) {
-  if (!url) return ""
-  if (/^https?:\/\//i.test(url)) return url
-  const assetBaseUrl = API_BASE_URL.replace(/\/api\/?$/, "")
-  return `${assetBaseUrl}${url.startsWith("/") ? url : `/${url}`}`
+  return resolveAssetUrl(url)
 }
 
 interface CategoryFormFieldsProps {

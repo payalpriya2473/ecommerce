@@ -3,6 +3,7 @@
 
 import express from "express";
 import { db } from "../config/db.js";
+import { toAssetUrl } from "../utils/assetUrl.js";
 import { requireCustomer } from "../middleware/customerAuth.js";
 
 const router = express.Router();
@@ -15,7 +16,6 @@ function fail(res, msg, status = 400) {
   return res.status(status).json({ success: false, message: msg });
 }
 
-const baseUrl = () => process.env.BASE_URL?.replace(/\/+$/, "") || "";
 
 // ─── Shared item fetch query ──────────────────────────────────────────────────
 // FIX: Now fetches offerPrice, originalPrice (nlc), and primaryImage from items table
@@ -43,7 +43,6 @@ const ITEM_SELECT = `
 router.get("/", async (req, res) => {
   try {
     const customerId = req.customer.id;
-    const base = baseUrl();
 
     const [rows] = await db.query(
       `${ITEM_SELECT} WHERE ww.customerId = ? AND i.isActive = 1 ORDER BY ww.addedAt DESC`,
@@ -52,12 +51,7 @@ router.get("/", async (req, res) => {
 
     const items = rows.map((row) => {
       // Build image URL
-      let image = null;
-      if (row.primaryImage) {
-        image = row.primaryImage.startsWith("http")
-          ? row.primaryImage
-          : `${base}/${row.primaryImage.replace(/^\/+/, "")}`;
-      }
+      const image = toAssetUrl(row.primaryImage);
 
       // offerPrice from items table; originalPrice from nlc if higher, else same
       const offerPrice = Number(row.offerPrice) || 0;

@@ -1,4 +1,5 @@
 "use client";
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -296,7 +297,7 @@ export default function TechnicianListPage() {
                             <Avatar>
                               <AvatarImage
                                 src={tech.photoUrl
-                                  ? `${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "")}${tech.photoUrl}`
+                                  ? resolveAssetUrl(tech.photoUrl)
                                   : undefined}
                                 alt={tech.name}
                               />

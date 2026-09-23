@@ -1,4 +1,5 @@
 "use client"
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -61,12 +62,7 @@ function CompanyViewContent() {
 
   const { canView, canEdit } = usePermissions()
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ?? ""
-  const getLogoSrc = (logoUrl?: string) => {
-    if (!logoUrl) return ""
-    if (logoUrl.startsWith("http") || logoUrl.startsWith("data:")) return logoUrl
-    return `${baseUrl}${logoUrl}`
-  }
+  const getLogoSrc = (logoUrl?: string) => resolveAssetUrl(logoUrl)
 
   useEffect(() => {
     if (companyId) fetchCompany()

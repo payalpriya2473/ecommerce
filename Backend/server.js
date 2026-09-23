@@ -1,4 +1,6 @@
 import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/auth.js";
@@ -38,6 +40,8 @@ import { checkDbConnection, dbStatus } from './config/db.js';
 
 
 dotenv.config();
+
+const BACKEND_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const router = express.Router();
@@ -183,7 +187,12 @@ router.use("/api/branches", branchRoutes);
 router.use('/api/departments', departmentRoutes);
 router.use("/api/designations", designationRoutes);
 router.use("/api/employees", employeeRoutes);
-router.use("/uploads", express.static("uploads"));
+// Uploaded images/icons. Multer writes to "<cwd>/uploads/..."; also serve
+// "<Backend folder>/uploads" in case PM2/node is started from another folder.
+router.use("/uploads", express.static(path.resolve(process.cwd(), "uploads"), { maxAge: "7d" }));
+if (path.resolve(BACKEND_DIR, "uploads") !== path.resolve(process.cwd(), "uploads")) {
+  router.use("/uploads", express.static(path.resolve(BACKEND_DIR, "uploads"), { maxAge: "7d" }));
+}
 router.use('/api/rbac', rbacRoutes);
 router.use('/api/suppliers', supplierRoutes);
 router.use('/api/categories',  categoryRoutes);

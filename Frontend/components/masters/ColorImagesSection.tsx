@@ -1,4 +1,5 @@
 "use client";
+import { resolveAssetUrl } from "@/lib/asset-url"
 // components/masters/VariantColorEditor.tsx
 // Drop-in replacement / addition to ItemFormFields.
 // Handles the new variant+color+image system.
@@ -246,7 +247,7 @@ function ColorRow({
               className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 group"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.imageUrl} alt="color img" className="w-full h-full object-cover" />
+              <img src={resolveAssetUrl(img.imageUrl)} alt="color img" className="w-full h-full object-cover" />
               <button
                 type="button"
                 onClick={() => removeExistingImage(img.id)}
@@ -425,7 +426,7 @@ function VariantCard({
               {(variant.images || []).map((img) => (
                 <div key={img.id} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 group">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img.imageUrl} alt="" className="w-full h-full object-cover" />
+                  <img src={resolveAssetUrl(img.imageUrl)} alt="" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => removeExistingImage(img.id)}

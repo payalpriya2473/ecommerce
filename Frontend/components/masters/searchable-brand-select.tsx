@@ -1,4 +1,5 @@
 "use client"
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useMemo, useState, useRef, useEffect } from "react"
 import { Check, ChevronDown, X, Tag } from "lucide-react"
@@ -13,10 +14,7 @@ export interface BrandOption {
 
 /** Resolve a brand's uploaded icon (relative /uploads/... path) to a full URL. */
 export function toBrandIconUrl(url?: string | null): string {
-  if (!url) return ""
-  if (/^https?:\/\//i.test(url)) return url
-  const assetBaseUrl = API_BASE_URL.replace(/\/api\/?$/, "")
-  return `${assetBaseUrl}${url.startsWith("/") ? url : `/${url}`}`
+  return resolveAssetUrl(url)
 }
 
 interface SearchableBrandSelectProps {

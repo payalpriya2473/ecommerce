@@ -532,12 +532,28 @@ export function getItemPrice(item: Pick<Item, "offerPrice" | "nlc" | "margin">):
   };
 }
 
+/**
+ * Resolve an image reference from the API to a URL the browser can load.
+ *
+ * Uploaded files ("/uploads/..." — or legacy absolute URLs such as
+ * "http://localhost:5001/uploads/...") are served SAME-ORIGIN from this site:
+ * next.config.js rewrites "/uploads/*" to the backend on the server side, so
+ * images work no matter which host/port the backend is reachable on.
+ */
 export function getImageUrl(
   path?: string | null,
   fallback = "/placeholder.svg"
 ): string {
   if (!path) return fallback;
-  if (path.startsWith("http")) return path;
-  const clean = path.startsWith("/") ? path.slice(1) : path;
+  const value = String(path).trim().replace(/\\/g, "/");
+  if (!value) return fallback;
+  if (value.startsWith("data:") || value.startsWith("blob:")) return value;
+
+  const uploadsIdx = value.indexOf("/uploads/");
+  if (uploadsIdx >= 0) return value.slice(uploadsIdx);
+  if (value.startsWith("uploads/")) return `/${value}`;
+
+  if (/^https?:\/\//i.test(value)) return value;
+  const clean = value.startsWith("/") ? value.slice(1) : value;
   return buildBackendUrl(clean);
 }

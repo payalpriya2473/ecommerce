@@ -7,6 +7,7 @@
 
 import express from "express";
 import { db } from "../config/db.js";
+import { toAssetUrl } from "../utils/assetUrl.js";
 import { requireCustomer } from "../middleware/customerAuth.js";
 import { ensureOrderPaymentSchema } from "../services/orderPaymentService.js";
 
@@ -20,12 +21,9 @@ function fail(res, msg, status = 400) {
   return res.status(status).json({ success: false, message: msg });
 }
 
-const baseUrl = () => process.env.BASE_URL?.replace(/\/+$/, "") || "";
 
 function absoluteImage(value) {
-  if (!value) return null;
-  if (String(value).startsWith("http")) return value;
-  return `${baseUrl()}/${String(value).replace(/^\/+/, "")}`;
+  return toAssetUrl(value);
 }
 
 const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;

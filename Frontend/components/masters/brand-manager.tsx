@@ -1,4 +1,5 @@
 "use client"
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -30,10 +31,7 @@ import { type SortState } from "@/lib/table-sort"
 import { TablePagination, DEFAULT_PAGE_SIZE } from "@/components/ui/table-pagination"
 
 function toBrandIconUrl(url?: string | null) {
-  if (!url) return ""
-  if (/^https?:\/\//i.test(url)) return url
-  const assetBaseUrl = API_BASE_URL.replace(/\/api\/?$/, "")
-  return `${assetBaseUrl}${url.startsWith("/") ? url : `/${url}`}`
+  return resolveAssetUrl(url)
 }
 
 export function BrandManager() {

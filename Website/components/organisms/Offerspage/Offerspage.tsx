@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
-import { publicOfferAPI, bankOfferGradient, brandDealPastel, type PublicOffer } from "@/lib/api/publicApi";
+import { publicOfferAPI, bankOfferGradient, brandDealPastel, getImageUrl, type PublicOffer } from "@/lib/api/publicApi";
 import "./Offerspage.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ function offerToCard(o: PublicOffer) {
     id: o.id,
     brand: o.brandName || "",
     name: o.itemName || "",
-    img: o.primaryImage || OFFER_FALLBACK_IMG,
+    img: getImageUrl(o.primaryImage, OFFER_FALLBACK_IMG),
     price,
     original,
     pct,
@@ -229,7 +229,7 @@ export default function OffersPage() {
     const total = items.reduce((s, it) => s + it.price, 0);
     const combo = Number(o.offerPrice ?? 0);
     const saving = Math.max(0, total - combo);
-    return { title: o.comboTitle || "Combo Deal", items, total, combo, img: o.primaryImage || OFFER_FALLBACK_IMG, badge: o.badge || (saving > 0 ? `Save ${fp(saving)}` : "Combo") };
+    return { title: o.comboTitle || "Combo Deal", items, total, combo, img: getImageUrl(o.primaryImage, OFFER_FALLBACK_IMG), badge: o.badge || (saving > 0 ? `Save ${fp(saving)}` : "Combo") };
   });
 
   // Hero countdown targets the soonest end time among live Flash Sale offers;
@@ -463,7 +463,7 @@ export default function OffersPage() {
                   <div key={o.id} className="off-brand-card" style={{ background: brandDealPastel(o.colorTheme) }}>
                     <div className="off-brand-logo">
                       {o.brandLogo ? (
-                        <img src={o.brandLogo} alt={o.brandDealName || "Brand"} className="off-brand-logo-img" />
+                        <img src={getImageUrl(o.brandLogo)} alt={o.brandDealName || "Brand"} className="off-brand-logo-img" />
                       ) : (
                         (o.brandDealName || "B").slice(0, 1)
                       )}

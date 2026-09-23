@@ -1,13 +1,11 @@
 import { db } from '../config/db.js';
 import fs from 'fs';
 import path from 'path';
+import { toAssetUrl, assetFilePath } from '../utils/assetUrl.js';
 
-const BASE_URL = process.env.BASE_URL?.replace(/\/+$/, '') || '';
-
+// Images are returned as root-relative "/uploads/..." paths (see utils/assetUrl.js)
 function toAbsUrl(p) {
-  if (!p) return null;
-  if (p.startsWith('http')) return p;
-  return `${BASE_URL}/${p.replace(/^\//, '')}`;
+  return toAssetUrl(p);
 }
 
 function parseBooleanLike(value, fallback = false) {
@@ -121,11 +119,8 @@ async function _saveColorsAndImages(primaryItemId, colorsJson, files) {
           [deleteIds, colorId]
         );
         for (const img of imgs) {
-          const relativePath = img.imageUrl.startsWith('http')
-            ? img.imageUrl.replace(BASE_URL, '').replace(/^\//, '')
-            : img.imageUrl.replace(/^\//, '');
-          const fp = path.join(process.cwd(), relativePath);
-          if (fs.existsSync(fp)) fs.unlinkSync(fp);
+          const fp = assetFilePath(img.imageUrl);
+          if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
         }
         if (imgs.length) {
           await db.query('DELETE FROM item_variant_images WHERE id IN (?)', [imgs.map((i) => i.id)]);
@@ -684,8 +679,8 @@ export const updateItem = async (req, res) => {
           [validDeleteIds]
         );
         await Promise.all(imgsToDelete.map((img) => {
-          const fp = path.join(process.cwd(), img.imageUrl);
-          if (fs.existsSync(fp)) fs.unlinkSync(fp);
+          const fp = assetFilePath(img.imageUrl);
+          if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
         }));
         if (imgsToDelete.length) {
           await db.query('DELETE FROM item_images WHERE id IN (?)', [imgsToDelete.map((i) => i.id)]);
@@ -766,8 +761,8 @@ export const updateItem = async (req, res) => {
         [validDeleteIds, id]
       );
       await Promise.all(imgsToDelete.map((img) => {
-        const fp = path.join(process.cwd(), img.imageUrl);
-        if (fs.existsSync(fp)) fs.unlinkSync(fp);
+        const fp = assetFilePath(img.imageUrl);
+        if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
       }));
       if (imgsToDelete.length) {
         await db.query('DELETE FROM item_images WHERE id IN (?)', [imgsToDelete.map((i) => i.id)]);
@@ -828,8 +823,8 @@ export const deleteItem = async (req, res) => {
       // Delete legacy item_images
       const [images] = await db.query('SELECT imageUrl FROM item_images WHERE itemId IN (?)', [siblingIds]);
       await Promise.all(images.map((img) => {
-        const fp = path.join(process.cwd(), img.imageUrl);
-        if (fs.existsSync(fp)) fs.unlinkSync(fp);
+        const fp = assetFilePath(img.imageUrl);
+        if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
       }));
       await db.query('DELETE FROM item_images WHERE itemId IN (?)', [siblingIds]);
 
@@ -839,8 +834,8 @@ export const deleteItem = async (req, res) => {
         const colorIds = colors.map((c) => c.id);
         const [colorImgs] = await db.query('SELECT imageUrl FROM item_variant_images WHERE itemVariantColorId IN (?)', [colorIds]);
         await Promise.all(colorImgs.map((img) => {
-          const fp = path.join(process.cwd(), img.imageUrl);
-          if (fs.existsSync(fp)) fs.unlinkSync(fp);
+          const fp = assetFilePath(img.imageUrl);
+          if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
         }));
         await db.query('DELETE FROM item_variant_images WHERE itemVariantColorId IN (?)', [colorIds]);
         await db.query('DELETE FROM item_variant_colors WHERE id IN (?)', [colorIds]);
@@ -891,8 +886,8 @@ export const deleteItemImage = async (req, res) => {
     if (!img.length)
       return res.status(404).json({ success: false, message: 'Image not found' });
 
-    const fp = path.join(process.cwd(), img[0].imageUrl);
-    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    const fp = assetFilePath(img[0].imageUrl);
+    if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
     await db.query('DELETE FROM item_images WHERE id = ?', [imageId]);
 
     return res.status(200).json({ success: true, message: 'Image deleted successfully' });

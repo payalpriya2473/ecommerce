@@ -1,4 +1,5 @@
 "use client";
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -20,12 +21,8 @@ import {
 } from "../ItemForm";
 import type { ItemFormValues, ItemVariantRow, VariantColorEntry } from "../ItemForm";
 
-const API_ROOT = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "";
-
 function toAbsoluteImageUrl(url?: string) {
-  if (!url) return "";
-  if (url.startsWith("http")) return url;
-  return `${API_ROOT}${url}`;
+  return resolveAssetUrl(url);
 }
 
 // ─────────────────────────────────────────────────────────────

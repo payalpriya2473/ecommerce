@@ -1,4 +1,5 @@
 "use client"
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
@@ -90,12 +91,7 @@ export default function CompanyListPage() {
 
   const { hasPermission, canView, canCreate, canEdit, canDelete } = usePermissions()
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ?? ""
-  const getLogoSrc = (logoUrl?: string) => {
-    if (!logoUrl) return ""
-    if (logoUrl.startsWith("http") || logoUrl.startsWith("data:")) return logoUrl
-    return `${baseUrl}${logoUrl}`
-  }
+  const getLogoSrc = (logoUrl?: string) => resolveAssetUrl(logoUrl)
 
   // Debounce the search box before hitting the API.
   useEffect(() => {

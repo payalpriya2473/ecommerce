@@ -1,5 +1,6 @@
 import { db } from '../config/db.js';
 import fs from 'fs';
+import { toStoredAssetPath, toAssetUrl, assetFilePath } from '../utils/assetUrl.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -12,11 +13,16 @@ const buildSlug = (name) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
-const deleteFile = (filePath) => {
+const deleteFile = (storedPath) => {
+  const filePath = assetFilePath(storedPath);
   if (filePath && fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
   }
 };
+
+// Stored as "/uploads/categories/<file>"; returned the same way (see utils/assetUrl.js)
+const withImageUrl = (row) =>
+  row ? { ...row, category_image: toAssetUrl(row.category_image), categoryImage: toAssetUrl(row.categoryImage ?? row.category_image) } : row;
 
 
 export const registerCategory = async (req, res) => {
@@ -64,7 +70,7 @@ export const registerCategory = async (req, res) => {
       return res.status(400).json({ success: false, message: 'A category with this name already exists' });
 
     // ── uploaded file paths ───────────────────────────────────────────────────
-    const categoryImage = req.files?.categoryImage?.[0]?.path || null;
+    const categoryImage = toStoredAssetPath(req.files?.categoryImage?.[0]?.path) || null;
 
     // ── insert ────────────────────────────────────────────────────────────────
     const [result] = await db.query(
@@ -98,7 +104,7 @@ export const registerCategory = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: 'Category registered successfully',
-      data: newCategory[0],
+      data: withImageUrl(newCategory[0]),
     });
   } catch (error) {
     console.error('Register category error:', error);
@@ -168,7 +174,7 @@ export const getAllCategories = async (req, res) => {
     }
 
     const [categories] = await db.query(query, params);
-    const payload = { success: true, data: categories };
+    const payload = { success: true, data: categories.map(withImageUrl) };
     if (paginationEnabled) {
       payload.pagination = {
         page: pageNumber,
@@ -201,7 +207,7 @@ export const getCategoryById = async (req, res) => {
     if (category.length === 0)
       return res.status(404).json({ success: false, message: 'Category not found' });
 
-    return res.status(200).json({ success: true, data: category[0] });
+    return res.status(200).json({ success: true, data: withImageUrl(category[0]) });
   } catch (error) {
     console.error('Get category error:', error);
     return res
@@ -257,7 +263,7 @@ export const updateCategory = async (req, res) => {
     if (req.files?.categoryImage?.[0]) {
       deleteFile(current.category_image);
       updates.push('category_image = ?');
-      values.push(req.files.categoryImage[0].path);
+      values.push(toStoredAssetPath(req.files.categoryImage[0].path));
     }
 
     if (updates.length === 0)
@@ -275,7 +281,7 @@ export const updateCategory = async (req, res) => {
        WHERE c.id = ?`,
       [id]
     );
-    return res.status(200).json({ success: true, message: 'Category updated successfully', data: updated[0] });
+    return res.status(200).json({ success: true, message: 'Category updated successfully', data: withImageUrl(updated[0]) });
   } catch (error) {
     console.error('Update category error:', error);
     return res

@@ -1,5 +1,9 @@
 import { db } from '../config/db.js';
 import fs from 'fs';
+import { toAssetUrl, assetFilePath } from '../utils/assetUrl.js';
+
+// Stored as "/uploads/brands/<file>"; returned the same way (see utils/assetUrl.js)
+const withIconUrl = (row) => (row ? { ...row, iconUrl: toAssetUrl(row.iconUrl) } : row);
 
 
 // ─────────────────────────────────────────────
@@ -34,7 +38,7 @@ export const registerBrand = async (req, res) => {
       [result.insertId]
     );
 
-    return res.status(201).json({ success: true, message: 'Brand registered successfully', data: newBrand[0] });
+    return res.status(201).json({ success: true, message: 'Brand registered successfully', data: withIconUrl(newBrand[0]) });
   } catch (error) {
     console.error('Register brand error:', error);
     return res.status(500).json({ success: false, message: 'Failed to register brand', error: error.message });
@@ -96,7 +100,7 @@ export const getAllBrands = async (req, res) => {
     }
 
     const [brands] = await db.query(query, params);
-    const payload = { success: true, data: brands };
+    const payload = { success: true, data: brands.map(withIconUrl) };
     if (paginationEnabled) {
       payload.pagination = {
         page: pageNumber,
@@ -130,7 +134,7 @@ export const getBrandById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Brand not found' });
     }
 
-    return res.status(200).json({ success: true, data: brand[0] });
+    return res.status(200).json({ success: true, data: withIconUrl(brand[0]) });
   } catch (error) {
     console.error('Get brand error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch brand', error: error.message });
@@ -160,14 +164,14 @@ export const updateBrand = async (req, res) => {
     if (iconFile) {
       // Delete old icon file if exists
       if (iconUrl) {
-        const oldPath = `.${iconUrl}`;
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        const oldPath = assetFilePath(iconUrl);
+        if (oldPath && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
       iconUrl = `/uploads/brands/${iconFile.filename}`;
     } else if (removeIcon === "true") {
       if (iconUrl) {
-        const oldPath = `.${iconUrl}`;
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        const oldPath = assetFilePath(iconUrl);
+        if (oldPath && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
       iconUrl = null;
     }
@@ -182,7 +186,7 @@ export const updateBrand = async (req, res) => {
       [id]
     );
 
-    return res.status(200).json({ success: true, message: 'Brand updated successfully', data: updated[0] });
+    return res.status(200).json({ success: true, message: 'Brand updated successfully', data: withIconUrl(updated[0]) });
   } catch (error) {
     console.error('Update brand error:', error);
     return res.status(500).json({ success: false, message: 'Failed to update brand', error: error.message });

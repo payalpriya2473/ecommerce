@@ -1,4 +1,5 @@
 "use client";
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -196,8 +197,7 @@ function TechnicianEditContent() {
     );
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ?? "";
-  const photoSrc = photoPreview || (existingPhoto ? `${baseUrl}${existingPhoto}` : "");
+  const photoSrc = photoPreview || (existingPhoto ? resolveAssetUrl(existingPhoto) : "");
 
   return (
     <div className="py-8 px-4">

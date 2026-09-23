@@ -1,4 +1,5 @@
 "use client";
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -108,7 +109,6 @@ function TechnicianViewContent() {
     name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
   // ✅ Build photo URL correctly (strip /api from base URL)
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ?? "";
 
   return (
     <div className="py-8 px-4">
@@ -142,7 +142,7 @@ function TechnicianViewContent() {
               <Avatar className="h-20 w-20 shrink-0">
                 {/* ✅ FIXED: photo URL uses baseUrl (no /api suffix) */}
                 <AvatarImage
-                  src={tech.photoUrl ? `${baseUrl}${tech.photoUrl}` : undefined}
+                  src={tech.photoUrl ? resolveAssetUrl(tech.photoUrl) : undefined}
                   alt={tech.name}
                 />
                 <AvatarFallback className="text-xl">{getInitials(tech.name)}</AvatarFallback>
@@ -277,7 +277,7 @@ function TechnicianViewContent() {
                   {documents.map((doc: any) => (
                     <a
                       key={doc.id}
-                      href={`${baseUrl}${doc.fileUrl}`}
+                      href={resolveAssetUrl(doc.fileUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="border rounded-lg p-3 flex items-center gap-3 hover:bg-muted/50 transition-colors"

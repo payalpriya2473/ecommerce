@@ -1,4 +1,5 @@
 "use client";
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -106,7 +107,7 @@ function EmployeeEditContent() {
         // Resolve existing photo URL
         if (e.photoUrl) {
           setPhotoPreview(
-            `${(process.env.NEXT_PUBLIC_API_URL ?? "").replace("/api", "")}${e.photoUrl}`
+            resolveAssetUrl(e.photoUrl)
           );
         }
       } catch (err: any) {

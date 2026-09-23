@@ -1,4 +1,5 @@
 "use client"
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -195,7 +196,7 @@ function EmployeeDetailContent() {
             <div className="flex items-start gap-6">
               <Avatar className="h-24 w-24">
                 <AvatarImage 
-                  src={employee.photoUrl ? `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${employee.photoUrl}` : undefined} 
+                  src={employee.photoUrl ? resolveAssetUrl(employee.photoUrl) : undefined} 
                   alt={employee.name} 
                 />
                 <AvatarFallback className="text-2xl">{getInitials(employee.name)}</AvatarFallback>

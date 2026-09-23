@@ -1,4 +1,5 @@
 "use client"
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { API_BASE_URL } from "@/lib/api"
 import { Button } from "@/components/ui/button"
@@ -21,10 +22,7 @@ export const EMPTY_BRAND_FORM: BrandFormValues = {
 }
 
 function toBrandIconUrl(url?: string | null) {
-  if (!url) return ""
-  if (/^https?:\/\//i.test(url)) return url
-  const assetBaseUrl = API_BASE_URL.replace(/\/api\/?$/, "")
-  return `${assetBaseUrl}${url.startsWith("/") ? url : `/${url}`}`
+  return resolveAssetUrl(url)
 }
 
 export function brandToFormValues(brand: { name: string; iconUrl?: string }): BrandFormValues {

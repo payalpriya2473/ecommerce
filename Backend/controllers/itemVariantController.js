@@ -10,7 +10,7 @@ import { db }  from '../config/db.js';
 import { authenticate } from '../middleware/auth.js'; // your existing auth middleware
 
 const router = express.Router();
-const BASE_URL = process.env.BASE_URL?.replace(/\/+$/, '') || '';
+import { toAssetUrl, assetFilePath } from '../utils/assetUrl.js';
 
 // ── Multer setup ────────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
@@ -35,9 +35,7 @@ const upload = multer({
 });
 
 function imgUrl(p) {
-  if (!p) return null;
-  if (p.startsWith('http')) return p;
-  return `${BASE_URL}/${p.replace(/^\//, '')}`;
+  return toAssetUrl(p);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -187,8 +185,8 @@ router.put('/:id', authenticate, upload.array('images', 10), async (req, res) =>
     if (deleteIds.length) {
       const [imgs] = await db.query('SELECT * FROM item_variant_images WHERE id IN (?) AND itemVariantColorId = ?', [deleteIds, id]);
       for (const img of imgs) {
-        const fp = path.join(process.cwd(), img.imageUrl);
-        if (fs.existsSync(fp)) fs.unlinkSync(fp);
+        const fp = assetFilePath(img.imageUrl);
+        if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
       }
       if (imgs.length) await db.query('DELETE FROM item_variant_images WHERE id IN (?)', [imgs.map(i => i.id)]);
     }
@@ -233,8 +231,8 @@ router.delete('/:id', authenticate, async (req, res) => {
     // Delete image files
     const [imgs] = await db.query('SELECT imageUrl FROM item_variant_images WHERE itemVariantColorId = ?', [id]);
     for (const img of imgs) {
-      const fp = path.join(process.cwd(), img.imageUrl);
-      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      const fp = assetFilePath(img.imageUrl);
+      if (fp && fs.existsSync(fp)) fs.unlinkSync(fp);
     }
     await db.query('DELETE FROM item_variant_images WHERE itemVariantColorId = ?', [id]);
     await db.query('DELETE FROM item_variant_colors WHERE id = ?', [id]);

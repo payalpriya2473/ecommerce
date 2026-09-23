@@ -4,7 +4,7 @@ import { ensureOffersSchema } from "../controllers/offerController.js";
 
 const router = express.Router();
 
-const BASE_URL = process.env.BASE_URL?.replace(/\/+$/, "") || "";
+import { toAssetUrl } from "../utils/assetUrl.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -34,11 +34,9 @@ function serverErr(res, error, msg = "Server error") {
   return res.status(500).json({ success: false, message: msg });
 }
 
-/** Prefix relative image paths with BASE_URL */
+/** Image URL for clients — canonical "/uploads/..." path (utils/assetUrl.js) */
 function imgUrl(path) {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  return `${BASE_URL}/${path.replace(/^\//, "")}`;
+  return toAssetUrl(path);
 }
 
 /** Normalize a category row — handles both snake_case and camelCase columns */

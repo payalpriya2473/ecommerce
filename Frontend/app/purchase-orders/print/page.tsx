@@ -1,4 +1,5 @@
 "use client"
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import type { CSSProperties } from "react"
 import { Suspense, useEffect, useMemo, useState } from "react"
@@ -199,9 +200,7 @@ function POPrintContent() {
   }
 
   const logoSrc = useMemo(() => {
-    if (!selectedCompany?.logoUrl) return ""
-    if (selectedCompany.logoUrl.startsWith("http") || selectedCompany.logoUrl.startsWith("data:")) return selectedCompany.logoUrl
-    return `${API_BASE}${selectedCompany.logoUrl}`
+    return resolveAssetUrl(selectedCompany?.logoUrl)
   }, [selectedCompany])
 
   if (loading) {

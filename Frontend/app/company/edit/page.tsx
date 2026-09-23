@@ -1,4 +1,5 @@
 "use client";
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -24,7 +25,6 @@ function CompanyEditContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const companyId = searchParams.get("id") || "";
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ?? "";
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,10 +75,7 @@ function CompanyEditContent() {
 
         // Load existing logo as preview
         if (d.logoUrl) {
-          const resolvedLogoUrl =
-            d.logoUrl.startsWith("http") || d.logoUrl.startsWith("data:")
-              ? d.logoUrl
-              : `${baseUrl}${d.logoUrl}`;
+          const resolvedLogoUrl = resolveAssetUrl(d.logoUrl);
           setLogoPreview(resolvedLogoUrl);
         }
 

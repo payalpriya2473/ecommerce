@@ -1,4 +1,5 @@
 "use client";
+import { resolveAssetUrl } from "@/lib/asset-url"
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -32,13 +33,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { itemAPI } from "@/lib/api";
 import Link from "next/link";
 
-const API_ROOT =
-  process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5001";
-
 function toAbsUrl(url?: string) {
-  if (!url) return null;
-  if (url.startsWith("http")) return url;
-  return `${API_ROOT}${url}`;
+  return resolveAssetUrl(url) || null;
 }
 
 // ─────────────────────────────────────────────────────────────

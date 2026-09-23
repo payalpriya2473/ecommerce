@@ -3,6 +3,7 @@
 
 import express from "express";
 import { db } from "../config/db.js";
+import { toAssetUrl } from "../utils/assetUrl.js";
 import { requireCustomer } from "../middleware/customerAuth.js";
 
 const router = express.Router();
@@ -15,7 +16,6 @@ function fail(res, msg, status = 400) {
   return res.status(status).json({ success: false, message: msg });
 }
 
-const baseUrl = () => process.env.BASE_URL?.replace(/\/+$/, "") || "";
 
 // ─── Shared enrichment query ──────────────────────────────────────────────────
 // FIX: Fetches offerPrice, nlc (original price), and real image from items/item_images tables.
@@ -54,16 +54,9 @@ async function fetchCartRows(customerId, table = "website_cart_items") {
     [customerId]
   );
 
-  const base = baseUrl();
-
   return rows.map((row) => {
     // Build full image URL
-    let image = null;
-    if (row.primaryImage) {
-      image = row.primaryImage.startsWith("http")
-        ? row.primaryImage
-        : `${base}/${row.primaryImage.replace(/^\/+/, "")}`;
-    }
+    const image = toAssetUrl(row.primaryImage);
 
     // Use real item price; fall back to priceSnapshot if item price is 0
     const itemOfferPrice = Number(row.itemOfferPrice) || 0;
