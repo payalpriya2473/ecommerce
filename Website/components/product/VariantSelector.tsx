@@ -61,10 +61,11 @@ function formatPrice(n: number) {
   return `Rs ${Math.round(n).toLocaleString("en-IN")}`;
 }
 
+// NLC is the MRP (both GST-inclusive from the API); no invented MRP.
 function getMrp(variant: ProductVariant): number {
-  const base = variant.offerPrice || variant.nlc || 0;
-  const m = variant.margin || 0;
-  return Math.round(base * (1 + m / 100));
+  const price = variant.offerPrice || 0;
+  const nlc = variant.nlc || 0;
+  return nlc > price ? nlc : price;
 }
 
 function getDiscount(variant: ProductVariant): number {

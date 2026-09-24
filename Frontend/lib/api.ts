@@ -2632,3 +2632,234 @@ export const itemVariantAPI = {
     return res.json();
   },
 };
+
+// ─── Online (website) orders ────────────────────────────────────────────────
+
+export type OnlineOrderStatus =
+  | 'pending_payment'
+  | 'payment_failed'
+  | 'processing'
+  | 'confirmed'
+  | 'packed'
+  | 'shipped'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'cancelled'
+  | 'returned';
+
+export interface OnlineOrderItem {
+  id: string;
+  itemId: string | null;
+  itemName: string;
+  brandName?: string | null;
+  categoryName?: string | null;
+  variant?: string | null;
+  colorName?: string | null;
+  primaryImage?: string | null;
+  qty: number;
+  unitPrice: number;
+  originalPrice: number;
+  gst: number;
+  lineTotal: number;
+  currentStock: number | null;
+}
+
+export interface OnlineOrderHistory {
+  id: number;
+  fromStatus: string | null;
+  toStatus: string;
+  note: string | null;
+  actorType: string;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface OnlineOrderPaymentEvent {
+  id: number;
+  eventType: string;
+  providerPaymentId: string | null;
+  amount: number | null;
+  status: string | null;
+  source: string;
+  createdAt: string;
+}
+
+export interface OnlineOrderNotification {
+  id: number;
+  event: string;
+  audience: 'customer' | 'store';
+  recipient: string | null;
+  status: 'sent' | 'failed' | 'skipped';
+  error: string | null;
+  createdAt: string;
+}
+
+export interface OnlineStoreSettings {
+  legalName: string;
+  tradeName: string;
+  gstin: string;
+  pan: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  pinCode: string;
+  phone: string;
+  email: string;
+  website: string;
+  alertEmail: string;
+  invoicePrefix: string;
+  invoiceTerms: string;
+  sendCustomerEmails: boolean;
+  configured?: boolean;
+  nextInvoicePreview?: string;
+}
+
+export interface OnlineOrder {
+  id: string;
+  orderNumber: string;
+  status: OnlineOrderStatus;
+  statusLabel: string;
+  nextStatuses: OnlineOrderStatus[];
+  placedAt: string;
+  updatedAt: string;
+  paymentMethod: string;
+  paymentDetail: string | null;
+  paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
+  paymentProvider: string | null;
+  providerOrderId: string | null;
+  providerPaymentId: string | null;
+  paymentError: string | null;
+  paidAt: string | null;
+  canRefund: boolean;
+  refundMode?: 'razorpay' | 'manual';
+  invoiceNumber?: string | null;
+  invoiceDate?: string | null;
+  customerHasEmail?: boolean;
+  notifications?: OnlineOrderNotification[];
+  deliveryType: string;
+  deliveryLabel: string | null;
+  couponCode: string | null;
+  subtotal: number;
+  productDiscount: number;
+  couponDiscount: number;
+  platformDiscount: number;
+  deliveryCharge: number;
+  codFee: number;
+  taxAmount: number;
+  totalAmount: number;
+  itemCount?: number;
+  customer: { id: string | null; name: string; email: string | null; phone: string | null };
+  address: {
+    type: string | null;
+    name: string | null;
+    phone: string | null;
+    line1: string | null;
+    line2: string | null;
+    city: string | null;
+    state: string | null;
+    pinCode: string | null;
+  };
+  notes: string | null;
+  adminNotes: string | null;
+  cancelReason: string | null;
+  stockDeducted: boolean;
+  courierName: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  confirmedAt: string | null;
+  packedAt: string | null;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  returnedAt: string | null;
+  cancelledAt: string | null;
+  items?: OnlineOrderItem[];
+  history?: OnlineOrderHistory[];
+  payments?: OnlineOrderPaymentEvent[];
+}
+
+export interface OnlineOrderListOptions {
+  status?: string;
+  search?: string;
+  payment?: '' | 'cod' | 'online';
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface OnlineOrderStatusPayload {
+  status: OnlineOrderStatus;
+  note?: string;
+  courierName?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  restock?: boolean;
+  refund?: boolean;
+}
+
+async function onlineOrderRequest(token: string, path: string, init?: RequestInit) {
+  const res = await fetch(`${API_BASE_URL}/admin/orders${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+    },
+  });
+  return parseApiResponse(res);
+}
+
+export const onlineOrderAPI = {
+  getAll: (token: string, options: OnlineOrderListOptions = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(options).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') params.append(key, String(value));
+    });
+    const qs = params.toString();
+    return onlineOrderRequest(token, qs ? `?${qs}` : '');
+  },
+  getById: (token: string, id: string) => onlineOrderRequest(token, `/${id}`),
+  changeStatus: (token: string, id: string, payload: OnlineOrderStatusPayload) =>
+    onlineOrderRequest(token, `/${id}/status`, { method: 'POST', body: JSON.stringify(payload) }),
+  cancel: (token: string, id: string, reason: string) =>
+    onlineOrderRequest(token, `/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  refund: (token: string, id: string, note?: string) =>
+    onlineOrderRequest(token, `/${id}/refund`, { method: 'POST', body: JSON.stringify({ note: note || '' }) }),
+  resendEmail: (token: string, id: string, event?: string) =>
+    onlineOrderRequest(token, `/${id}/notify`, { method: 'POST', body: JSON.stringify({ event: event || '' }) }),
+  /** Fetch the GST invoice PDF as a Blob (or an error message). */
+  getInvoice: async (token: string, id: string): Promise<{ blob?: Blob; filename?: string; message?: string }> => {
+    const res = await fetch(`${API_BASE_URL}/admin/orders/${id}/invoice`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok || !(res.headers.get('content-type') || '').includes('pdf')) {
+      const payload = await parseApiResponse(res);
+      return { message: payload?.message || 'Could not load the invoice' };
+    }
+    const disposition = res.headers.get('content-disposition') || '';
+    const filename = /filename="([^"]+)"/.exec(disposition)?.[1] || `invoice-${id}.pdf`;
+    return { blob: await res.blob(), filename };
+  },
+  updateShipping: (
+    token: string,
+    id: string,
+    data: { courierName: string; trackingNumber: string; trackingUrl?: string },
+  ) => onlineOrderRequest(token, `/${id}/shipping`, { method: 'PUT', body: JSON.stringify(data) }),
+  saveNotes: (token: string, id: string, adminNotes: string) =>
+    onlineOrderRequest(token, `/${id}/notes`, { method: 'PUT', body: JSON.stringify({ adminNotes }) }),
+};
+
+export const onlineStoreSettingsAPI = {
+  get: async (token: string) => {
+    const res = await fetch(`${API_BASE_URL}/admin/store-settings`, { headers: { Authorization: `Bearer ${token}` } });
+    return parseApiResponse(res);
+  },
+  save: async (token: string, data: Partial<OnlineStoreSettings>) => {
+    const res = await fetch(`${API_BASE_URL}/admin/store-settings`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return parseApiResponse(res);
+  },
+};

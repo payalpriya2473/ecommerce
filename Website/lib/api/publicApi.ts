@@ -500,15 +500,12 @@ export function getItemOfferPrice(item: Pick<Item, "offerPrice" | "nlc">): numbe
 export function getItemOriginalPrice(
   item: Pick<Item, "offerPrice" | "nlc" | "margin">
 ): number {
+  // The API sends GST-inclusive prices: offerPrice = selling price (MOP),
+  // nlc = MRP. No MRP is invented when NLC is not above the selling price.
   const offerPrice = getItemOfferPrice(item);
   const nlc = Number(item.nlc ?? 0) || 0;
 
-  if (nlc > offerPrice) return nlc;
-  if (item.margin != null && offerPrice > 0) {
-    return Math.round(offerPrice * (1 + Number(item.margin) / 100));
-  }
-
-  return offerPrice;
+  return nlc > offerPrice ? nlc : offerPrice;
 }
 
 export function getItemDiscountPercent(

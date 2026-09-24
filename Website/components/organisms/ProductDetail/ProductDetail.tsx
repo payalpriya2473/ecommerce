@@ -99,10 +99,11 @@ function getColorSwatchStyle(color: VariantColor) {
   return { backgroundColor: "#e0e0e0" };
 }
 
+// NLC is the MRP (GST-inclusive from the API); no invented MRP.
 function getMrp(item: Pick<Item, "offerPrice" | "nlc" | "margin">): number {
-  const base = getItemOfferPrice(item);
-  const m = Number(item.margin ?? 10) || 10;
-  return Math.round(base * (1 + m / 100));
+  const price = getItemOfferPrice(item);
+  const nlc = Number(item.nlc ?? 0) || 0;
+  return nlc > price ? nlc : price;
 }
 
 function getDiscount(price: number, mrp: number): number {

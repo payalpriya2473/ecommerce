@@ -157,7 +157,7 @@ router.post("/razorpay/verify", async (req, res) => {
 
     // The order id must be the one we issued for this order — otherwise a
     // customer could replay someone else's (valid) payment signature.
-    if (order.providerOrderId && order.providerOrderId !== razorpayOrderId) {
+    if (!order.providerOrderId || order.providerOrderId !== razorpayOrderId) {
       return fail(res, "Payment does not belong to this order", 409);
     }
 
@@ -195,8 +195,9 @@ router.post("/razorpay/verify", async (req, res) => {
         return fail(res, "Paid amount does not match the order total. Our team will contact you.", 409);
       }
     } catch (e) {
-      // Verification API hiccup — the signature already proved authenticity and
-      // the webhook will reconcile, so don't block the customer here.
+      // Verification API hiccup. Still safe: the signature proves this payment
+      // belongs to OUR Razorpay order (checked above), and that Razorpay order
+      // was created for exactly this order's total. The webhook re-checks.
       console.warn("[payments/verify] payment fetch failed:", e.message);
     }
 
@@ -205,8 +206,12 @@ router.post("/razorpay/verify", async (req, res) => {
       paymentId: razorpayPaymentId,
       signature,
       source: "callback",
+      paidAmountPaise: capturedAmount,
     });
 
+    if (!result.ok && result.reason === "amount_mismatch") {
+      return fail(res, "Paid amount does not match the order total. Our team will contact you.", 409);
+    }
     if (!result.ok) return fail(res, "Could not confirm the payment", 500);
 
     return ok(

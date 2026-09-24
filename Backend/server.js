@@ -32,6 +32,8 @@ import customerWishlistRouter from "./routes/customerWishlist.js";
 import customerCartRouter    from "./routes/customerCart.js";
 import customerProfileRouter from "./routes/customerProfile.js";
 import customerOrdersRouter  from "./routes/customerOrders.js";
+import adminOrdersRouter     from "./routes/adminOrders.js";
+import adminStoreSettingsRouter from "./routes/adminStoreSettings.js";
 import contactRouter         from "./routes/contactRoutes.js";
 import customerPaymentsRouter from "./routes/customerPayments.js";
 import razorpayWebhookRouter from "./routes/razorpayWebhook.js";
@@ -223,6 +225,8 @@ router.use("/api/customer/wishlist", customerWishlistRouter);
 router.use("/api/customer/cart",     customerCartRouter);
 router.use("/api/customer/profile",  customerProfileRouter);
 router.use("/api/customer/orders",   customerOrdersRouter);
+router.use("/api/admin/orders",      adminOrdersRouter);
+router.use("/api/admin/store-settings", adminStoreSettingsRouter);
 router.use("/api/customer/payments", customerPaymentsRouter);
 router.use("/api/contact",           contactRouter);
 

@@ -19,6 +19,7 @@ import {
   getCategoryUrl,
   getImageUrl,
   getItemCardKey,
+  getItemDiscountPercent,
   Item,
   slugifyCategoryName,
   publicOfferAPI,
@@ -137,7 +138,7 @@ function itemToCard(
       item.nlc && item.nlc > (item.offerPrice ?? 0)
         ? `Rs ${item.nlc.toLocaleString("en-IN")}`
         : undefined,
-    save: item.margin ? `${Math.round(item.margin)}% off` : undefined,
+    save: getItemDiscountPercent(item) > 0 ? `${getItemDiscountPercent(item)}% off` : undefined,
     href: buildProductDetailUrlForItem(item, item.primaryImage ?? null),
     itemId: item.id,
     cardKey: getItemCardKey(item),
@@ -715,9 +716,9 @@ export default function HomePage() {
                   Rs {dealProduct.nlc.toLocaleString("en-IN")}
                 </span>
               )}
-              {dealProduct?.margin && (
+              {dealProduct && getItemDiscountPercent(dealProduct) > 0 && (
                 <span className="deal-save-badge">
-                  Save {Math.round(dealProduct.margin)}%
+                  Save {getItemDiscountPercent(dealProduct)}%
                 </span>
               )}
             </div>

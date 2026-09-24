@@ -286,7 +286,7 @@ export const testEmailConfig = async (req, res) => {
 };
 
 // Helper: use this in other controllers to send emails
-export const sendEmail = async ({ to, subject, html, text }) => {
+export const sendEmail = async ({ to, subject, html, text, attachments, replyTo }) => {
   const [rows] = await pool.query(
     "SELECT * FROM email_config WHERE id = 1 AND is_active = 1",
   );
@@ -301,5 +301,7 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     subject,
     html,
     text,
+    ...(attachments?.length ? { attachments } : {}),
+    ...(replyTo ? { replyTo } : {}),
   });
 };

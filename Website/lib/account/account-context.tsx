@@ -76,6 +76,22 @@ export interface AccountOrder {
   deliveryLabel?: string;
   address?: string;
   awaitingPayment?: boolean;
+  /** Raw backend status (confirmed, packed, out_for_delivery, …). */
+  stage?: string;
+  canCancel?: boolean;
+  cancelReason?: string | null;
+  courierName?: string | null;
+  trackingNumber?: string | null;
+  trackingUrl?: string | null;
+  placedAt?: string | null;
+  paidAt?: string | null;
+  confirmedAt?: string | null;
+  packedAt?: string | null;
+  shippedAt?: string | null;
+  deliveredAt?: string | null;
+  returnedAt?: string | null;
+  cancelledAt?: string | null;
+  hasInvoice?: boolean;
 }
 
 export interface AccountSettings {
@@ -252,7 +268,12 @@ export function orderFromApi(order: CustomerOrder): AccountOrder {
   // The account UI only knows five states; unpaid orders ride along as
   // "processing" with an explicit label so nothing renders blank.
   const awaitingPayment = order.status === "pending_payment" || order.status === "payment_failed";
-  const uiStatus = awaitingPayment ? "processing" : order.status;
+  const uiStatus =
+    awaitingPayment || order.status === "confirmed" || order.status === "packed"
+      ? "processing"
+      : order.status === "out_for_delivery"
+        ? "shipped"
+        : order.status;
 
   return {
     id: order.orderNumber || String(order.id),
@@ -262,7 +283,22 @@ export function orderFromApi(order: CustomerOrder): AccountOrder {
     statusLabel: order.statusLabel || "Order Placed",
     awaitingPayment,
     total: Number(order.totalAmount) || 0,
-    canTrack: !awaitingPayment && (order.status === "processing" || order.status === "shipped"),
+    canTrack: !awaitingPayment && order.status !== "cancelled",
+    stage: order.status,
+    canCancel: Boolean(order.canCancel),
+    cancelReason: order.cancelReason ?? null,
+    courierName: order.courierName ?? null,
+    trackingNumber: order.trackingNumber ?? null,
+    trackingUrl: order.trackingUrl ?? null,
+    placedAt: order.placedAt ?? null,
+    paidAt: order.paidAt ?? null,
+    confirmedAt: order.confirmedAt ?? null,
+    packedAt: order.packedAt ?? null,
+    shippedAt: order.shippedAt ?? null,
+    deliveredAt: order.deliveredAt ?? null,
+    returnedAt: order.returnedAt ?? null,
+    cancelledAt: order.cancelledAt ?? null,
+    hasInvoice: Boolean(order.hasInvoice),
     canReturn: order.status === "delivered",
     paymentLabel: order.paymentDetail ? `${paymentLabel} · ${order.paymentDetail}` : paymentLabel,
     deliveryLabel: order.deliveryLabel ?? undefined,

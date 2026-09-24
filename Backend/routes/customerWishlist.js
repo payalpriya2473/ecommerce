@@ -4,6 +4,7 @@
 import express from "express";
 import { db } from "../config/db.js";
 import { toAssetUrl } from "../utils/assetUrl.js";
+import { priceItem } from "../services/pricing.js";
 import { requireCustomer } from "../middleware/customerAuth.js";
 
 const router = express.Router();
@@ -54,8 +55,9 @@ router.get("/", async (req, res) => {
       const image = toAssetUrl(row.primaryImage);
 
       // offerPrice from items table; originalPrice from nlc if higher, else same
-      const offerPrice = Number(row.offerPrice) || 0;
-      const originalPrice = Number(row.nlc) > offerPrice ? Number(row.nlc) : offerPrice;
+      const priced = priceItem(row); // GST-inclusive, see services/pricing.js
+      const offerPrice = priced.sellingPrice;
+      const originalPrice = priced.mrp > offerPrice ? priced.mrp : offerPrice;
 
       return {
         id: String(row.id),

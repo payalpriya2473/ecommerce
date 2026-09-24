@@ -37,6 +37,7 @@ const PERMISSION_DEFS = [
   // Temporarily disabled: Finance Companies permissions.
   // ['finance_companies', FULL],
   ['live_stock',        FULL],
+  ['online_orders',     ['view', 'edit']],
 ];
 
 const ACTION_LABEL = { view: 'View', create: 'Create', edit: 'Edit', update: 'Edit', delete: 'Delete' };

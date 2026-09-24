@@ -5,6 +5,8 @@ import { ensureOffersSchema } from "../controllers/offerController.js";
 const router = express.Router();
 
 import { toAssetUrl } from "../utils/assetUrl.js";
+import { toCustomerPricing, toInclusive } from "../services/pricing.js";
+import { listActiveCoupons, findCoupon, couponDiscount } from "../services/coupons.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -391,7 +393,7 @@ router.get("/items", async (req, res) => {
         [...params, limitNum, offset]
       );
       const colorMap = await loadColorsByItem(rows.map((r) => r.id));
-      const mapped = rows.map((r) => ({
+      const mapped = rows.map(toCustomerPricing).map((r) => ({
         ...r,
         primaryImage: colorMap[r.id]?.[0]?.primaryImage || imgUrl(r.legacyPrimaryImage),
         colors: colorMap[r.id] || [],
@@ -408,7 +410,8 @@ router.get("/items", async (req, res) => {
       params
     );
     const colorMap = await loadColorsByItem(rows.map((r) => r.id));
-    const cards = buildProductCards(rows, colorMap);
+    // Customer-facing (GST-inclusive) prices — see services/pricing.js
+    const cards = buildProductCards(rows.map(toCustomerPricing), colorMap);
     const total = cards.length;
     const pageCards = cards.slice(offset, offset + limitNum);
 
@@ -440,7 +443,7 @@ router.get("/items/:id", async (req, res) => {
 
     if (!rows.length) return notFound(res, "Item not found");
 
-    const item = rows[0];
+    const item = toCustomerPricing(rows[0]);
 
     // ── Legacy images (kept for fallback) ────────────────────────────────────
     const [legacyImages] = await db.query(
@@ -506,7 +509,7 @@ router.get("/items/:id", async (req, res) => {
       }
 
       variantsWithColors.push({
-        ...sib,
+        ...toCustomerPricing(sib),
         colors:      finalColors,
         primaryImage: finalColors[0]?.primaryImage || null,
       });
@@ -560,6 +563,7 @@ router.get("/offers", async (req, res) => {
          i.itemName   AS itemName,
          i.variant    AS variant,
          i.offerPrice AS mrp,
+         i.gst        AS itemGst,
          b.name       AS brandName,
          ig.name      AS itemGroupName,
          bd.name      AS brandMasterName,
@@ -648,8 +652,18 @@ router.get("/offers", async (req, res) => {
         o.section === "combo" && comboItems[0]?.itemId
           ? comboImageMap[Number(comboItems[0].itemId)]
           : null;
+      // Product offers: show prices the same way as product pages (GST-inclusive).
+      // "mrp" here is the product's selling price the offer is compared against.
+      const pricedOffer =
+        o.itemId && o.section !== "combo"
+          ? {
+              mrp: toInclusive(o.mrp, o.itemGst) || null,
+              offerPrice: o.offerPrice != null ? toInclusive(o.offerPrice, o.itemGst) || null : null,
+            }
+          : {};
       return {
         ...o,
+        ...pricedOffer,
         primaryImage: comboImage || imgUrl(o.colorPrimaryImage || o.legacyPrimaryImage),
         brandLogo: imgUrl(o.brandLogoRaw),
         tags: o.tags
@@ -663,6 +677,29 @@ router.get("/offers", async (req, res) => {
     });
 
     return ok(res, data);
+  } catch (e) {
+    return serverErr(res, e);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUPONS  (managed in admin → Offers → Coupon)
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get("/coupons", async (req, res) => {
+  try {
+    return ok(res, await listActiveCoupons());
+  } catch (e) {
+    return serverErr(res, e);
+  }
+});
+
+// GET /coupons/validate?code=SAVE10&subtotal=45000
+router.get("/coupons/validate", async (req, res) => {
+  try {
+    const coupon = await findCoupon(req.query.code);
+    const { discount, reason } = couponDiscount(coupon, Number(req.query.subtotal) || 0);
+    return ok(res, { valid: discount > 0, discount, reason, coupon });
   } catch (e) {
     return serverErr(res, e);
   }

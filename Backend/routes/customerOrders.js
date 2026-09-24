@@ -7,9 +7,14 @@
 
 import express from "express";
 import { db } from "../config/db.js";
-import { toAssetUrl } from "../utils/assetUrl.js";
+import { toAssetUrl, toStoredAssetPath } from "../utils/assetUrl.js";
+import { priceItem, gstIncludedIn, getPriceTaxMode } from "../services/pricing.js";
+import { findCoupon, couponDiscount } from "../services/coupons.js";
 import { requireCustomer } from "../middleware/customerAuth.js";
 import { ensureOrderPaymentSchema } from "../services/orderPaymentService.js";
+import { STATUS_LABELS, CUSTOMER_CANCELLABLE, cancelOrder, OrderError } from "../services/orderFulfilment.js";
+import { notifyOrder, ORDER_ITEM_IMAGE_SQL } from "../services/orderNotifications.js";
+import { ensureInvoice, getInvoicePdf, InvoiceError } from "../services/invoice.js";
 
 const router = express.Router();
 router.use(requireCustomer);
@@ -28,14 +33,13 @@ function absoluteImage(value) {
 
 const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
-// ─── Pricing rules (kept in sync with Website/lib/pricing) ────────────────────
-
-export const COUPONS = {
-  MOTAB10:   { pct: 10, max: 3000, label: "10% off up to Rs 3,000" },
-  HDFC5:     { pct: 5,  max: 2000, label: "5% off up to Rs 2,000 (HDFC)" },
-  NEWUSER15: { pct: 15, max: 2000, label: "15% off up to Rs 2,000" },
-  SAVE500:   { flat: 500, label: "Flat Rs 500 off" },
-};
+// ─── Pricing rules (kept in sync with Website/lib/pricing/order-pricing.ts) ──
+//
+// • Line prices come ONLY from the Item Master (services/pricing.js), shown
+//   GST-inclusive. Nothing the browser sends is trusted for price or name.
+// • GST is already inside the price; `taxAmount` = GST contained in the order
+//   (for the invoice / breakup), it is NOT added on top.
+// • Coupons come from the admin Offers module (services/coupons.js).
 
 const DELIVERY_OPTIONS = {
   free:      { label: "Standard Delivery",  cost: 0 },
@@ -45,21 +49,33 @@ const DELIVERY_OPTIONS = {
 
 const PAYMENT_METHODS = new Set(["upi", "card", "netbanking", "wallet", "cod"]);
 
-function couponDiscountFor(code, subtotal) {
-  const coupon = COUPONS[String(code || "").toUpperCase()];
-  if (!coupon) return 0;
-  if (coupon.flat) return Math.min(coupon.flat, subtotal);
-  return Math.min(Math.floor((subtotal * coupon.pct) / 100), coupon.max);
-}
+// Statuses a customer may still cancel from (before the order is packed).
 
-function priceOrder({ lines, couponCode, deliveryType, paymentMethod }) {
+/**
+ * Price validated lines. `lines` carry GST-inclusive unitPrice/originalPrice
+ * and the item GST rate. Returns totals + coupon info.
+ */
+async function priceOrder({ lines, couponCode, deliveryType, paymentMethod }) {
   const subtotal = round2(lines.reduce((sum, l) => sum + l.unitPrice * l.qty, 0));
   const originalTotal = round2(
     lines.reduce((sum, l) => sum + Math.max(l.originalPrice, l.unitPrice) * l.qty, 0)
   );
   const productDiscount = round2(Math.max(0, originalTotal - subtotal));
 
-  const couponDiscount = round2(couponDiscountFor(couponCode, subtotal));
+  let couponDiscountValue = 0;
+  let appliedCoupon = null;
+  let couponError = null;
+  if (couponCode) {
+    const coupon = await findCoupon(couponCode);
+    const { discount, reason } = couponDiscount(coupon, subtotal);
+    if (discount > 0) {
+      couponDiscountValue = discount;
+      appliedCoupon = coupon;
+    } else {
+      couponError = reason;
+    }
+  }
+
   const platformDiscount = subtotal > 50000 ? 500 : 0;
 
   const option = DELIVERY_OPTIONS[deliveryType] || DELIVERY_OPTIONS.free;
@@ -72,23 +88,162 @@ function priceOrder({ lines, couponCode, deliveryType, paymentMethod }) {
 
   const codFee = paymentMethod === "cod" && subtotal > 0 && subtotal < 1000 ? 29 : 0;
 
-  const taxable = Math.max(0, subtotal - couponDiscount - platformDiscount);
-  const taxAmount = Math.round(taxable * 0.018);
-  const totalAmount = round2(
-    Math.max(0, taxable + deliveryCharge + codFee + taxAmount)
-  );
+  const payableGoods = Math.max(0, subtotal - couponDiscountValue - platformDiscount);
+
+  // GST contained in the goods value, reduced in proportion to order discounts.
+  const includedGst = lines.reduce((sum, l) => sum + gstIncludedIn(l.unitPrice * l.qty, l.gst), 0);
+  const discountFactor = subtotal > 0 ? payableGoods / subtotal : 0;
+  const taxAmount = round2(includedGst * discountFactor);
+
+  const totalAmount = round2(Math.max(0, payableGoods + deliveryCharge + codFee));
 
   return {
     subtotal,
+    originalTotal,
     productDiscount,
-    couponDiscount,
+    couponDiscount: couponDiscountValue,
+    couponCode: appliedCoupon ? appliedCoupon.code : null,
+    couponLabel: appliedCoupon ? appliedCoupon.label : null,
+    couponError,
     platformDiscount,
     deliveryCharge,
     codFee,
     taxAmount,
+    taxableAmount: round2(Math.max(0, payableGoods - taxAmount)),
     totalAmount,
     deliveryLabel: option.label,
+    priceTaxMode: getPriceTaxMode(),
   };
+}
+
+/**
+ * Validate requested cart lines against the live Item Master.
+ * Every line must be an active item with a price and enough stock.
+ * Returns { lines, problems } — problems are customer-readable strings.
+ */
+async function buildOrderLines(items) {
+  const problems = [];
+  const requested = [];
+  for (const entry of Array.isArray(items) ? items : []) {
+    const itemId = entry?.itemId ?? entry?.id;
+    if (itemId == null || !/^\d+$/.test(String(itemId))) {
+      problems.push(`${entry?.itemName || "A product"} is not available`);
+      continue;
+    }
+    requested.push({
+      itemId: String(itemId),
+      qty: Math.max(1, Math.min(99, Math.floor(Number(entry.qty) || 1))),
+      colorName: entry.colorName ? String(entry.colorName).slice(0, 100) : null,
+      primaryImage: entry.primaryImage || null,
+      itemName: entry.itemName || null,
+    });
+  }
+
+  const ids = [...new Set(requested.map((r) => r.itemId))];
+  const rowMap = new Map();
+  if (ids.length) {
+    const [rows] = await db.query(
+      `SELECT
+         i.id, i.itemName, i.variant, i.gst, i.isActive, i.openingStock,
+         i.offerPrice, i.nlc,
+         b.name   AS brandName,
+         cat.name AS categoryName,
+         (SELECT imageUrl FROM item_images WHERE itemId = i.id ORDER BY sortOrder ASC LIMIT 1) AS primaryImage
+       FROM items i
+       LEFT JOIN item_groups ig ON ig.id = i.itemGroupId
+       LEFT JOIN categories cat ON cat.id = ig.categoryId
+       LEFT JOIN brands b       ON b.id  = i.brandId
+       WHERE i.id IN (${ids.map(() => "?").join(",")})`,
+      ids
+    );
+    for (const row of rows) rowMap.set(String(row.id), row);
+  }
+
+  // Same item may appear on several lines (e.g. two colours) — check total qty.
+  const qtyByItem = new Map();
+  for (const r of requested) qtyByItem.set(r.itemId, (qtyByItem.get(r.itemId) || 0) + r.qty);
+
+  const lines = [];
+  const stockChecked = new Set();
+  for (const r of requested) {
+    const row = rowMap.get(r.itemId);
+    const name = row?.itemName
+      ? `${row.itemName}${row.variant ? ` (${row.variant})` : ""}`
+      : r.itemName || `Item #${r.itemId}`;
+
+    if (!row || !Number(row.isActive)) {
+      problems.push(`${name} is no longer available`);
+      continue;
+    }
+    const priced = priceItem(row);
+    if (priced.sellingPrice <= 0) {
+      problems.push(`${name} is not available for online purchase right now`);
+      continue;
+    }
+    if (!stockChecked.has(r.itemId)) {
+      stockChecked.add(r.itemId);
+      const stock = Math.floor(Number(row.openingStock) || 0);
+      const wanted = qtyByItem.get(r.itemId);
+      if (stock <= 0) {
+        problems.push(`${name} is out of stock`);
+        continue;
+      }
+      if (wanted > stock) {
+        problems.push(`Only ${stock} unit(s) of ${name} left in stock`);
+        continue;
+      }
+    }
+
+    // Keep the colour image the customer saw only if it is one of our uploads.
+    const clientImage = toStoredAssetPath(r.primaryImage);
+    const primaryImage =
+      clientImage && String(clientImage).startsWith("/uploads/") ? clientImage : row.primaryImage || null;
+
+    lines.push({
+      itemId: row.id,
+      itemName: row.itemName,
+      brandName: row.brandName || null,
+      categoryName: row.categoryName || null,
+      variant: row.variant || null,
+      colorName: r.colorName,
+      primaryImage,
+      qty: r.qty,
+      unitPrice: priced.sellingPrice,
+      originalPrice: priced.mrp > priced.sellingPrice ? priced.mrp : priced.sellingPrice,
+      gst: priced.gstRate,
+    });
+  }
+
+  return { lines, problems };
+}
+
+/** Same customer + same basket + same total within 2 minutes = double submit. */
+async function findRecentDuplicate(customerId, lines, totalAmount) {
+  const [recent] = await db.query(
+    `SELECT id FROM website_orders
+      WHERE customerId = ? AND totalAmount = ?
+        AND status IN ('pending_payment', 'processing')
+        AND placedAt >= (NOW() - INTERVAL 2 MINUTE)
+      ORDER BY id DESC LIMIT 5`,
+    [customerId, totalAmount]
+  );
+  if (!recent.length) return null;
+
+  const signature = (arr) =>
+    arr
+      .map((l) => `${l.itemId}:${l.qty}:${(l.colorName || "").toLowerCase()}`)
+      .sort()
+      .join("|");
+  const wanted = signature(lines);
+
+  for (const candidate of recent) {
+    const [rows] = await db.query(
+      "SELECT itemId, qty, colorName FROM website_order_items WHERE orderId = ?",
+      [candidate.id]
+    );
+    if (signature(rows) === wanted) return candidate.id;
+  }
+  return null;
 }
 
 // ─── Schema bootstrap (idempotent) ───────────────────────────────────────────
@@ -103,7 +258,7 @@ async function ensureSchema() {
           id BIGINT(20) NOT NULL AUTO_INCREMENT,
           orderNumber VARCHAR(40) NOT NULL DEFAULT '',
           customerId BIGINT(20) NOT NULL,
-          status ENUM('pending_payment','processing','shipped','delivered','cancelled','returned','payment_failed') NOT NULL DEFAULT 'processing',
+          status ENUM('pending_payment','payment_failed','processing','confirmed','packed','shipped','out_for_delivery','delivered','cancelled','returned') NOT NULL DEFAULT 'processing',
           statusLabel VARCHAR(80) NOT NULL DEFAULT 'Order Placed',
           paymentMethod VARCHAR(30) NOT NULL DEFAULT 'cod',
           paymentDetail VARCHAR(150) DEFAULT NULL,
@@ -175,15 +330,6 @@ async function ensureSchema() {
 
 // ─── Row → API shape ─────────────────────────────────────────────────────────
 
-const STATUS_LABELS = {
-  pending_payment: "Awaiting Payment",
-  payment_failed: "Payment Failed",
-  processing: "Order Placed",
-  shipped: "Shipped",
-  delivered: "Delivered",
-  cancelled: "Cancelled",
-  returned: "Returned",
-};
 
 function mapOrder(order, items) {
   return {
@@ -202,7 +348,20 @@ function mapOrder(order, items) {
     providerPaymentId: order.providerPaymentId ?? null,
     paymentError: order.paymentError ?? null,
     paidAt: order.paidAt ?? null,
-    requiresPayment: order.paymentMethod !== "cod" && order.paymentStatus !== "paid",
+    requiresPayment:
+      order.paymentMethod !== "cod" && order.paymentStatus !== "paid" && order.status !== "cancelled",
+    canCancel: CUSTOMER_CANCELLABLE.has(order.status),
+    cancelReason: order.cancelReason ?? null,
+    confirmedAt: order.confirmedAt ?? null,
+    packedAt: order.packedAt ?? null,
+    shippedAt: order.shippedAt ?? null,
+    deliveredAt: order.deliveredAt ?? null,
+    returnedAt: order.returnedAt ?? null,
+    courierName: order.courierName ?? null,
+    trackingNumber: order.trackingNumber ?? null,
+    trackingUrl: order.trackingUrl ?? null,
+    invoiceNumber: order.invoiceNumber ?? null,
+    hasInvoice: Boolean(order.invoiceNumber) || INVOICEABLE.has(order.status),
     deliveryType: order.deliveryType,
     deliveryLabel: order.deliveryLabel,
     couponCode: order.couponCode,
@@ -259,7 +418,8 @@ async function loadOrders(customerId, { orderId, limit = 50 } = {}) {
 
   const ids = orders.map((o) => o.id);
   const [items] = await db.query(
-    `SELECT * FROM website_order_items WHERE orderId IN (${ids.map(() => "?").join(",")}) ORDER BY id ASC`,
+    `SELECT oi.*, ${ORDER_ITEM_IMAGE_SQL} AS primaryImage
+       FROM website_order_items oi WHERE oi.orderId IN (${ids.map(() => "?").join(",")}) ORDER BY oi.id ASC`,
     ids
   );
 
@@ -303,6 +463,34 @@ router.get("/:id", async (req, res) => {
   } catch (e) {
     console.error("[orders/GET/:id]", e);
     return fail(res, "Server error", 500);
+  }
+});
+
+/**
+ * POST /api/customer/orders/quote
+ * Server-priced totals for the checkout page (same maths as placing the order).
+ * Body: { items, couponCode?, deliveryType?, paymentMethod? }
+ */
+router.post("/quote", async (req, res) => {
+  try {
+    const { items = [], couponCode = null, deliveryType = "free", paymentMethod = "cod" } = req.body || {};
+    const { lines, problems } = await buildOrderLines(items);
+    const totals = await priceOrder({ lines, couponCode, deliveryType, paymentMethod });
+    return ok(res, {
+      ...totals,
+      problems,
+      lines: lines.map((l) => ({
+        itemId: String(l.itemId),
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        originalPrice: l.originalPrice,
+        gst: l.gst,
+        lineTotal: round2(l.unitPrice * l.qty),
+      })),
+    });
+  } catch (e) {
+    console.error("[orders/quote]", e);
+    return fail(res, "Could not calculate the order total", 500);
   }
 });
 
@@ -386,90 +574,35 @@ router.post("/", async (req, res) => {
 
     if (!shipping) return fail(res, "A delivery address is required");
 
-    // ── Re-price every line from the live items table ──────────────────────
-    const requestedIds = [
-      ...new Set(items.map((i) => i.itemId ?? i.id).filter((id) => id != null).map(String)),
-    ];
-
-    let itemRows = [];
-    if (requestedIds.length > 0) {
-      const [rows] = await db.query(
-        `SELECT
-           i.id, i.itemName, i.variant, i.gst, i.isActive,
-           i.offerPrice AS itemOfferPrice, i.nlc AS itemNlc,
-           b.name   AS brandName,
-           cat.name AS categoryName,
-           (SELECT imageUrl FROM item_images WHERE itemId = i.id ORDER BY sortOrder ASC LIMIT 1) AS primaryImage
-         FROM items i
-         LEFT JOIN item_groups ig ON ig.id = i.itemGroupId
-         LEFT JOIN categories cat ON cat.id = ig.categoryId
-         LEFT JOIN brands b       ON b.id  = i.brandId
-         WHERE i.id IN (${requestedIds.map(() => "?").join(",")})`,
-        requestedIds
-      );
-      itemRows = rows;
-    }
-
-    const itemMap = new Map(itemRows.map((row) => [String(row.id), row]));
-
-    const lines = [];
-    const unavailable = [];
-
-    for (const entry of items) {
-      const itemId = entry.itemId ?? entry.id;
-      const qty = Math.max(1, Math.min(99, Number(entry.qty) || 1));
-      const row = itemId != null ? itemMap.get(String(itemId)) : null;
-
-      if (row && !row.isActive) {
-        unavailable.push(row.itemName || `Item #${itemId}`);
-        continue;
-      }
-
-      const dbOffer = row ? Number(row.itemOfferPrice) || 0 : 0;
-      const dbNlc = row ? Number(row.itemNlc) || 0 : 0;
-      const clientOffer = Number(entry.unitPrice ?? entry.offerPrice) || 0;
-      const clientOriginal = Number(entry.originalPrice) || 0;
-
-      const unitPrice = round2(dbOffer || clientOffer);
-      const originalPrice = round2(
-        Math.max(dbNlc > unitPrice ? dbNlc : 0, clientOriginal, unitPrice)
-      );
-
-      if (unitPrice <= 0) {
-        unavailable.push(row?.itemName || entry.itemName || `Item #${itemId}`);
-        continue;
-      }
-
-      lines.push({
-        itemId: row ? row.id : null,
-        itemName: row?.itemName || entry.itemName || "Product",
-        brandName: row?.brandName || entry.brandName || null,
-        categoryName: row?.categoryName || entry.categoryName || null,
-        variant: row?.variant || entry.variant || null,
-        colorName: entry.colorName || null,
-        primaryImage: row?.primaryImage || entry.primaryImage || null,
-        qty,
-        unitPrice,
-        originalPrice,
-        gst: row ? Number(row.gst) || 0 : Number(entry.gst) || 0,
+    // ── Validate every line against the live Item Master ─────────────────
+    const { lines, problems } = await buildOrderLines(items);
+    if (problems.length) {
+      // Don't silently drop products — let the customer review the cart.
+      return res.status(409).json({
+        success: false,
+        message: `Please review your cart: ${problems.join("; ")}`,
+        data: { problems },
       });
     }
+    if (lines.length === 0) return fail(res, "No valid products in this order");
 
-    if (lines.length === 0) {
-      return fail(
-        res,
-        unavailable.length
-          ? `These products are no longer available: ${unavailable.join(", ")}`
-          : "No valid products in this order"
-      );
-    }
-
-    const totals = priceOrder({
+    const totals = await priceOrder({
       lines,
       couponCode,
       deliveryType,
       paymentMethod,
     });
+    if (couponCode && totals.couponError) {
+      return fail(res, totals.couponError);
+    }
+
+    // ── Double-submit guard (double click / network retry) ─────────────────
+    const duplicateId = await findRecentDuplicate(customerId, lines, totals.totalAmount);
+    if (duplicateId) {
+      const [existing] = await loadOrders(customerId, { orderId: duplicateId, limit: 1 });
+      return ok(res, { ...existing, unavailable: [], duplicate: true }, "Order already placed");
+    }
+    const unavailable = [];
 
     // ── Persist ───────────────────────────────────────────────────────────
     connection = await db.getConnection();
@@ -507,7 +640,7 @@ router.post("/", async (req, res) => {
         "pending",
         deliveryType,
         totals.deliveryLabel,
-        couponCode ? String(couponCode).toUpperCase() : null,
+        totals.couponCode,
         totals.subtotal,
         totals.productDiscount,
         totals.couponDiscount,
@@ -579,6 +712,8 @@ router.post("/", async (req, res) => {
     connection = null;
 
     const [order] = await loadOrders(customerId, { orderId, limit: 1 });
+    // COD orders are placed right away; online orders email after payment.
+    if (isCod) notifyOrder(orderId, "placed");
 
     return ok(
       res,
@@ -601,31 +736,53 @@ router.post("/", async (req, res) => {
   }
 });
 
+const INVOICEABLE = new Set(["shipped", "out_for_delivery", "delivered", "returned"]);
+
+/** GET /api/customer/orders/:id/invoice — GST invoice PDF (available once shipped). */
+router.get("/:id/invoice", async (req, res) => {
+  try {
+    const [[order]] = await db.query(
+      "SELECT id, status, invoiceNumber FROM website_orders WHERE id = ? AND customerId = ?",
+      [req.params.id, req.customer.id]
+    );
+    if (!order) return fail(res, "Order not found", 404);
+    if (!order.invoiceNumber) {
+      if (!INVOICEABLE.has(order.status)) return fail(res, "Your invoice will be available once the order is shipped.", 409);
+      await ensureInvoice(order.id);
+    }
+    const { pdf, filename } = await getInvoicePdf(order.id);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    });
+    return res.send(pdf);
+  } catch (e) {
+    if (e instanceof InvoiceError) return fail(res, e.message, e.status);
+    console.error("[orders/invoice]", e);
+    return fail(res, "Could not generate the invoice", 500);
+  }
+});
+
 /**
  * POST /api/customer/orders/:id/cancel
+ * Customers can cancel only before the order is packed. A paid online order
+ * is refunded in full through Razorpay (the webhook then confirms it).
  */
 router.post("/:id/cancel", async (req, res) => {
   try {
     await ensureSchema();
-
-    const [[order]] = await db.query(
-      "SELECT id, status FROM website_orders WHERE id = ? AND customerId = ?",
-      [req.params.id, req.customer.id]
-    );
-    if (!order) return fail(res, "Order not found", 404);
-    if (order.status === "cancelled") return fail(res, "Order is already cancelled");
-    if (order.status === "delivered") return fail(res, "Delivered orders cannot be cancelled");
-
-    await db.query(
-      `UPDATE website_orders
-         SET status = 'cancelled', statusLabel = 'Cancelled', cancelledAt = NOW()
-       WHERE id = ? AND customerId = ?`,
-      [req.params.id, req.customer.id]
-    );
-
+    const reason = String(req.body?.reason || "").trim().slice(0, 255) || "Cancelled by customer";
+    const { refundNote } = await cancelOrder({
+      orderId: req.params.id,
+      customerId: req.customer.id,
+      reason,
+      actor: { type: "customer", id: req.customer.id, name: "Customer" },
+    });
     const [updated] = await loadOrders(req.customer.id, { orderId: req.params.id, limit: 1 });
-    return ok(res, updated, "Order cancelled");
+    return ok(res, updated, refundNote ? `Order cancelled. ${refundNote}` : "Order cancelled");
   } catch (e) {
+    if (e instanceof OrderError) return fail(res, e.message, e.status);
     console.error("[orders/cancel]", e);
     return fail(res, "Server error", 500);
   }

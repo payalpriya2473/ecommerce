@@ -97,6 +97,13 @@ async function handleEvent(event, eventId) {
         orderId: localOrder.id,
         paymentId: payment?.id || null,
         source: "webhook",
+        // amount check: order.paid carries the order entity, payment.captured the payment
+        paidAmountPaise:
+          payment?.amount != null
+            ? Number(payment.amount)
+            : order?.amount_paid != null
+              ? Number(order.amount_paid)
+              : null,
       });
       break;
 
@@ -115,6 +122,7 @@ async function handleEvent(event, eventId) {
         orderId: localOrder.id,
         paymentId: refund?.payment_id || null,
         amount: refund?.amount != null ? Number(refund.amount) / 100 : null,
+        totalRefunded: payment?.amount_refunded != null ? Number(payment.amount_refunded) / 100 : null,
         source: "webhook",
       });
       break;

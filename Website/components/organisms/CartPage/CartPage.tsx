@@ -15,13 +15,15 @@ import {
 import { cartItemFromItem, useCart } from "@/lib/cart/cart-context";
 import { isLoggedIn, onCustomerAuthChange } from "@/lib/api/customerApi";
 import {
-  COUPONS,
   computeOrderTotals,
+  couponBlockReason,
   formatRupees,
+  loadCoupons,
   normalizeCouponCode,
   readCheckoutCoupon,
   saveCheckoutCoupon,
 } from "@/lib/pricing/order-pricing";
+import { useCoupons } from "@/lib/pricing/use-coupons";
 import { useWishlist, wishlistItemFromCartItem } from "@/lib/wishlist/wishlist-context";
 import {
   buildProductDetailUrlForItem,
@@ -122,6 +124,8 @@ export default function CartPage() {
   const { itemCount: wishlistCount, addItem: addWishlistItem } = useWishlist();
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [couponInput, setCouponInput] = useState("");
+  // Coupons are managed in admin → Offers → Coupon.
+  const { coupons: COUPONS, loaded: couponsLoaded } = useCoupons();
   const [savedOpen, setSavedOpen] = useState(true);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -144,6 +148,15 @@ export default function CartPage() {
     const stored = readCheckoutCoupon();
     if (stored) setAppliedCoupon(stored);
   }, [hydrated]);
+
+  // Drop a stored coupon that no longer exists / expired in the admin.
+  useEffect(() => {
+    if (!couponsLoaded || !appliedCoupon) return;
+    if (!normalizeCouponCode(appliedCoupon)) {
+      setAppliedCoupon(null);
+      saveCheckoutCoupon(null);
+    }
+  }, [couponsLoaded, appliedCoupon]);
 
   // ── Derived state ──
   // Only ticked items are priced (and only those get carried into checkout).
@@ -216,10 +229,16 @@ export default function CartPage() {
   };
 
   // ── Coupon ──
-  const applyCoupon = (code?: string) => {
+  const applyCoupon = async (code?: string) => {
     const raw = (code || couponInput).trim();
     if (!raw) { showToast("Please enter a coupon code", "warning"); return; }
+    if (!couponsLoaded) await loadCoupons();
     const normalized = normalizeCouponCode(raw);
+    const blocked = normalized ? couponBlockReason(normalized, subtotal) : null;
+    if (normalized && blocked) {
+      showToast(blocked, "warning");
+      return;
+    }
     if (normalized) {
       setAppliedCoupon(normalized);
       saveCheckoutCoupon(normalized);
@@ -840,7 +859,7 @@ export default function CartPage() {
                   </span>
                 </div>
                 <div className="price-row">
-                  <span className="pr-label"><i className="fas fa-file-invoice" /> GST (applicable)</span>
+                  <span className="pr-label"><i className="fas fa-file-invoice" /> GST (included in price)</span>
                   <span className="pr-val">Rs {formatRupees(tax)}</span>
                 </div>
                 <div className="price-row total">

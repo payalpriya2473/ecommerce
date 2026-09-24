@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getImageUrl } from "@/lib/api/publicApi";
-import { customerAuthAPI, isLoggedIn, onCustomerAuthChange } from "@/lib/api/customerApi";
+import { customerAuthAPI, customerOrderAPI, isLoggedIn, onCustomerAuthChange } from "@/lib/api/customerApi";
 import { useCart } from "@/lib/cart/cart-context";
 import { useWishlist } from "@/lib/wishlist/wishlist-context";
 import { useAccount, AccountAddress, AccountPanelSettingKey } from "@/lib/account/account-context";
@@ -48,6 +48,52 @@ const STATUS_ICON = {
 } as const;
 
 const fp = (value: number) => `Rs ${value.toLocaleString("en-IN")}`;
+
+const fdt = (value?: string | null) =>
+  value
+    ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+    : "";
+
+type TrackableOrder = {
+  date: string;
+  stage?: string;
+  placedAt?: string | null;
+  confirmedAt?: string | null;
+  packedAt?: string | null;
+  shippedAt?: string | null;
+  deliveredAt?: string | null;
+  returnedAt?: string | null;
+  cancelledAt?: string | null;
+  courierName?: string | null;
+  trackingNumber?: string | null;
+};
+
+/** Real order timeline from the backend timestamps. */
+function trackSteps(order: TrackableOrder) {
+  const outForDelivery = order.stage === "out_for_delivery";
+  const raw = [
+    { title: "Order Placed", sub: "We have received your order", at: order.placedAt || null, done: true },
+    { title: "Confirmed", sub: "Order confirmed by AppleNext", at: order.confirmedAt || null, done: Boolean(order.confirmedAt) },
+    { title: "Packed", sub: "Packed and ready to ship", at: order.packedAt || null, done: Boolean(order.packedAt) },
+    {
+      title: outForDelivery ? "Out for Delivery" : "Shipped",
+      sub: order.trackingNumber ? `${order.courierName || "Courier"} · AWB ${order.trackingNumber}` : "Handed over to the courier",
+      at: order.shippedAt || null,
+      done: Boolean(order.shippedAt),
+    },
+    { title: "Delivered", sub: "Delivery confirmation", at: order.deliveredAt || null, done: Boolean(order.deliveredAt) },
+  ];
+  if (order.stage === "returned") {
+    raw.push({ title: "Returned", sub: "Return received by AppleNext", at: order.returnedAt || null, done: true });
+  }
+  const firstPending = raw.findIndex((step) => !step.done);
+  return raw.map((step, index) => ({
+    state: step.done ? "done" : index === firstPending ? "active" : "pending",
+    title: step.title,
+    sub: step.sub,
+    time: step.at ? fdt(step.at) : index === 0 ? order.date : "",
+  }));
+}
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -108,9 +154,35 @@ export default function AccountPage() {
     removeAddress,
     setDefaultAddress,
     orders,
+    refreshOrders,
     settings,
     updateSetting,
   } = useAccount();
+
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  const downloadInvoice = async (order: { orderId?: string }) => {
+    if (!order.orderId) return;
+    const result = await customerOrderAPI.downloadInvoice(order.orderId);
+    if (!result.success) showToast(`<i class="fas fa-circle-info"></i> ${result.message || "Invoice is not available yet"}`, "info");
+  };
+
+  const cancelOrder = async (order: { id: string; orderId?: string }) => {
+    if (!order.orderId || cancellingId) return;
+    if (!window.confirm(`Cancel order ${order.id}? If you paid online, the full amount will be refunded.`)) return;
+    setCancellingId(order.id);
+    try {
+      const response = await customerOrderAPI.cancel(order.orderId);
+      if (response.success) {
+        showToast(`<i class="fas fa-circle-check"></i> ${response.message || "Order cancelled"}`, "success");
+        await refreshOrders();
+      } else {
+        showToast(`<i class="fas fa-triangle-exclamation"></i> ${response.message || "Could not cancel this order"}`, "warning");
+      }
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const [draftProfile, setDraftProfile] = useState(profile);
 
@@ -551,8 +623,9 @@ export default function AccountPage() {
                           <div className="acc-order-total">Total: <strong>{fp(order.total)}</strong></div>
                           <div className="acc-order-actions">
                             {order.canTrack ? <button className="acc-action-btn acc-btn-track" onClick={() => setShowTrackId(order.id)}><i className="fas fa-map-pin" /> Track</button> : null}
-                            <button className="acc-action-btn acc-btn-invoice" onClick={() => showToast('<i class="fas fa-file-invoice"></i> Invoice feature is ready for live backend integration', "info")}><i className="fas fa-file-invoice" /> Invoice</button>
-                            {order.canReturn ? <button className="acc-action-btn acc-btn-return" onClick={() => showToast('<i class="fas fa-rotate-left"></i> Return request initiated', "info")}><i className="fas fa-rotate-left" /> Return</button> : null}
+                            {order.canCancel ? <button className="acc-action-btn acc-btn-return" disabled={cancellingId === order.id} onClick={() => void cancelOrder(order)}><i className="fas fa-xmark" /> {cancellingId === order.id ? "Cancelling…" : "Cancel"}</button> : null}
+                            {order.hasInvoice ? <button className="acc-action-btn acc-btn-invoice" onClick={() => void downloadInvoice(order)}><i className="fas fa-file-invoice" /> Invoice</button> : null}
+                            {order.canReturn ? <button className="acc-action-btn acc-btn-return" onClick={() => showToast('<i class="fas fa-rotate-left"></i> To return this order, please contact our support team', "info")}><i className="fas fa-rotate-left" /> Return</button> : null}
                           </div>
                         </div>
                       </div>
@@ -862,20 +935,28 @@ export default function AccountPage() {
             </div>
             <div className="acc-track-body">
               <div className={`acc-delivery-banner${activeOrder.status === "delivered" ? " delivered" : " in-transit"}`}>
-                <div className={`acc-db-icon${activeOrder.status === "delivered" ? " green" : " blue"}`}><i className={activeOrder.status === "delivered" ? "fas fa-circle-check" : "fas fa-truck-fast"} /></div>
+                <div className={`acc-db-icon${activeOrder.status === "delivered" ? " green" : " blue"}`}><i className={activeOrder.status === "delivered" ? "fas fa-circle-check" : activeOrder.status === "returned" ? "fas fa-rotate-left" : "fas fa-truck-fast"} /></div>
                 <div className="acc-db-text">
                   <h4>{activeOrder.status === "delivered" ? "Delivered Successfully!" : activeOrder.statusLabel}</h4>
-                  <p>{activeOrder.status === "delivered" ? `Delivered on ${activeOrder.date}` : "Your order is being processed through the live account store."}</p>
+                  <p>
+                    {activeOrder.status === "delivered"
+                      ? `Delivered on ${fdt(activeOrder.deliveredAt) || activeOrder.date}`
+                      : activeOrder.status === "returned"
+                        ? `Return received${activeOrder.returnedAt ? ` on ${fdt(activeOrder.returnedAt)}` : ""}`
+                        : activeOrder.trackingNumber
+                        ? `${activeOrder.courierName || "Courier"} · AWB ${activeOrder.trackingNumber}`
+                        : "We'll share the courier tracking details as soon as your order ships."}
+                  </p>
+                  {activeOrder.trackingUrl && activeOrder.status !== "returned" && activeOrder.status !== "delivered" ? (
+                    <a href={activeOrder.trackingUrl} target="_blank" rel="noreferrer" style={{ color: "var(--brand)", fontSize: ".8rem", fontWeight: 600 }}>
+                      Track with courier <i className="fas fa-arrow-up-right-from-square" />
+                    </a>
+                  ) : null}
                 </div>
                 <div className="acc-db-date"><div className="acc-date-label">Order date</div><div className="acc-date-val">{activeOrder.date}</div></div>
               </div>
               <div className="acc-timeline">
-                {[
-                  { state: "done", title: "Order Placed", sub: "Order confirmed successfully", time: activeOrder.date },
-                  { state: activeOrder.status === "processing" ? "active" : "done", title: "Processing", sub: "Preparing your order", time: activeOrder.date },
-                  { state: activeOrder.status === "shipped" ? "active" : activeOrder.status === "delivered" ? "done" : "pending", title: "Shipped", sub: "Order is on the way", time: activeOrder.date },
-                  { state: activeOrder.status === "delivered" ? "done" : "pending", title: "Delivered", sub: "Delivery confirmation", time: activeOrder.date },
-                ].map((step, index) => (
+                {trackSteps(activeOrder).map((step, index) => (
                   <div key={index} className="acc-tl-item">
                     <div className={`acc-tl-dot ${step.state}`} />
                     <div className="acc-tl-content">

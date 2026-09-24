@@ -3,6 +3,8 @@
 // checkout callback and the webhook can never drift apart.
 
 import { db } from "../config/db.js";
+import { refundRazorpayPayment } from "./razorpayService.js";
+import { notifyOrder } from "./orderNotifications.js";
 
 let schemaReady = null;
 
@@ -53,7 +55,7 @@ export function ensureOrderPaymentSchema() {
         .query(
           `ALTER TABLE website_orders
              MODIFY COLUMN status
-             ENUM('pending_payment','processing','shipped','delivered','cancelled','returned','payment_failed')
+             ENUM('pending_payment','payment_failed','processing','confirmed','packed','shipped','out_for_delivery','delivered','cancelled','returned')
              NOT NULL DEFAULT 'processing'`
         )
         .catch((e) => console.warn("[payments] could not widen status enum:", e.message));
@@ -143,7 +145,7 @@ export async function findOrderByProviderOrderId(providerOrderId) {
  * Idempotent: a second call (webhook after callback, or a replayed webhook)
  * is a no-op and reports alreadyPaid.
  */
-export async function markOrderPaid({ orderId, paymentId, signature = null, source = "callback" }) {
+export async function markOrderPaid({ orderId, paymentId, signature = null, source = "callback", paidAmountPaise = null }) {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
@@ -161,6 +163,63 @@ export async function markOrderPaid({ orderId, paymentId, signature = null, sour
     if (order.paymentStatus === "paid") {
       await connection.commit();
       return { ok: true, alreadyPaid: true, order };
+    }
+
+    // Never mark an order paid for a different amount than its total.
+    if (paidAmountPaise != null && Number(paidAmountPaise) !== Math.round(Number(order.totalAmount) * 100)) {
+      await connection.rollback();
+      await recordPaymentEvent({
+        orderId,
+        eventType: "payment.amount_mismatch",
+        providerOrderId: order.providerOrderId,
+        providerPaymentId: paymentId,
+        amount: Number(paidAmountPaise) / 100,
+        status: "mismatch",
+        source,
+        payload: { expected: Number(order.totalAmount), paid: Number(paidAmountPaise) / 100 },
+      });
+      notifyOrder(orderId, "payment_issue", {
+        message: `Razorpay payment ${paymentId || ""} of Rs ${Number(paidAmountPaise) / 100} does not match the order total Rs ${order.totalAmount}. The order was NOT marked paid — check it in Razorpay.`,
+      });
+      return { ok: false, reason: "amount_mismatch", order };
+    }
+
+    // Money arrived for an order the customer already cancelled: record the
+    // payment, keep it cancelled, and refund it.
+    if (order.status === "cancelled") {
+      await connection.query(
+        `UPDATE website_orders
+            SET paymentStatus = 'paid', statusLabel = 'Cancelled – Refund Pending',
+                providerPaymentId = COALESCE(?, providerPaymentId), paidAt = NOW()
+          WHERE id = ?`,
+        [paymentId, orderId]
+      );
+      await connection.commit();
+      await recordPaymentEvent({
+        orderId,
+        eventType: "payment.on_cancelled_order",
+        providerOrderId: order.providerOrderId,
+        providerPaymentId: paymentId,
+        amount: order.totalAmount,
+        status: "refund_pending",
+        source,
+      });
+      let autoRefunded = false;
+      if (paymentId) {
+        try {
+          await refundRazorpayPayment(paymentId);
+          await db.query("UPDATE website_orders SET statusLabel = 'Cancelled – Refund Initiated' WHERE id = ?", [orderId]);
+          autoRefunded = true;
+        } catch (e) {
+          console.error(`[payments] auto-refund failed for cancelled order ${orderId}:`, e.message);
+        }
+      }
+      notifyOrder(orderId, "payment_issue", {
+        message: `Payment ${paymentId || ""} arrived after the order was cancelled. ${autoRefunded ? "It was refunded automatically." : "Automatic refund FAILED — refund it from Online Orders."}`,
+      });
+      if (autoRefunded) notifyOrder(orderId, "refund_initiated");
+      const [[updatedCancelled]] = await db.query("SELECT * FROM website_orders WHERE id = ?", [orderId]);
+      return { ok: true, alreadyPaid: false, cancelled: true, order: updatedCancelled };
     }
 
     await connection.query(
@@ -202,6 +261,7 @@ export async function markOrderPaid({ orderId, paymentId, signature = null, sour
       status: "paid",
       source,
     });
+    notifyOrder(orderId, "placed");
 
     return { ok: true, alreadyPaid: false, order: updated };
   } catch (e) {
@@ -213,6 +273,7 @@ export async function markOrderPaid({ orderId, paymentId, signature = null, sour
 }
 
 export async function markOrderPaymentFailed({ orderId, paymentId = null, reason = null, source = "callback" }) {
+  const [[before]] = await db.query("SELECT status FROM website_orders WHERE id = ?", [orderId]);
   await db.query(
     `UPDATE website_orders
         SET paymentStatus     = 'failed',
@@ -232,16 +293,29 @@ export async function markOrderPaymentFailed({ orderId, paymentId = null, reason
     source,
     payload: reason ? { reason } : null,
   });
+  if (before?.status === "pending_payment") notifyOrder(orderId, "payment_failed");
 }
 
-export async function markOrderRefunded({ orderId, paymentId = null, amount = null, source = "webhook" }) {
-  await db.query(
-    `UPDATE website_orders
-        SET paymentStatus = 'refunded',
-            statusLabel   = 'Refunded'
-      WHERE id = ?`,
-    [orderId]
-  );
+export async function markOrderRefunded({ orderId, paymentId = null, amount = null, totalRefunded = null, source = "webhook" }) {
+  const [[order]] = await db.query("SELECT totalAmount, status FROM website_orders WHERE id = ?", [orderId]);
+  const refundedSoFar = totalRefunded != null ? Number(totalRefunded) : Number(amount);
+  const isFull =
+    !order || !Number.isFinite(refundedSoFar) || refundedSoFar >= Number(order.totalAmount) - 0.01;
+
+  if (isFull) {
+    await db.query(
+      `UPDATE website_orders
+          SET paymentStatus = 'refunded',
+              statusLabel   = CASE WHEN status = 'cancelled' THEN 'Cancelled – Refunded'
+                                   WHEN status = 'returned'  THEN 'Returned – Refunded'
+                                   ELSE 'Refunded' END
+        WHERE id = ?`,
+      [orderId]
+    );
+  } else {
+    // Partial refund: money is still (partly) with us — keep it "paid".
+    await db.query("UPDATE website_orders SET statusLabel = 'Partially Refunded' WHERE id = ?", [orderId]);
+  }
 
   await recordPaymentEvent({
     orderId,
@@ -251,4 +325,5 @@ export async function markOrderRefunded({ orderId, paymentId = null, amount = nu
     status: "refunded",
     source,
   });
+  if (isFull) notifyOrder(orderId, "refunded", { amount: refundedSoFar || amount });
 }

@@ -514,7 +514,10 @@ export interface CustomerOrder {
     | "pending_payment"
     | "payment_failed"
     | "processing"
+    | "confirmed"
+    | "packed"
     | "shipped"
+    | "out_for_delivery"
     | "delivered"
     | "cancelled"
     | "returned";
@@ -531,6 +534,18 @@ export interface CustomerOrder {
   paymentError?: string | null;
   paidAt?: string | null;
   requiresPayment?: boolean;
+  canCancel?: boolean;
+  cancelReason?: string | null;
+  confirmedAt?: string | null;
+  packedAt?: string | null;
+  shippedAt?: string | null;
+  deliveredAt?: string | null;
+  returnedAt?: string | null;
+  courierName?: string | null;
+  trackingNumber?: string | null;
+  trackingUrl?: string | null;
+  invoiceNumber?: string | null;
+  hasInvoice?: boolean;
   deliveryType: string;
   deliveryLabel?: string | null;
   couponCode?: string | null;
@@ -647,6 +662,32 @@ export const customerPaymentAPI = {
 };
 
 export const customerOrderAPI = {
+  /** GST invoice PDF (available once the order ships). */
+  downloadInvoice: async (id: string | number): Promise<{ success: boolean; message?: string }> => {
+    const token = getAccessToken();
+    try {
+      const res = await fetch(`${BASE}/orders/${id}/invoice`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok || !(res.headers.get("content-type") || "").includes("pdf")) {
+        const payload = await res.json().catch(() => null);
+        return { success: false, message: payload?.message || "Invoice is not available yet" };
+      }
+      const filename = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") || "")?.[1] || `invoice-${id}.pdf`;
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      return { success: true };
+    } catch {
+      return { success: false, message: "Could not download the invoice" };
+    }
+  },
+
   getAll: () => apiFetch<CustomerOrder[]>(`${BASE}/orders`),
 
   getOne: (id: string | number) => apiFetch<CustomerOrder>(`${BASE}/orders/${id}`),
@@ -657,9 +698,37 @@ export const customerOrderAPI = {
       body: JSON.stringify(payload),
     }),
 
-  cancel: (id: string | number) =>
-    apiFetch<CustomerOrder>(`${BASE}/orders/${id}/cancel`, { method: "POST" }),
+  cancel: (id: string | number, reason?: string) =>
+    apiFetch<CustomerOrder>(`${BASE}/orders/${id}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason || "" }),
+    }),
+
+  /** Server-priced totals for checkout (same maths the order is placed with). */
+  quote: (payload: Pick<PlaceOrderPayload, "items" | "couponCode" | "deliveryType" | "paymentMethod">) =>
+    apiFetch<OrderQuote>(`${BASE}/orders/quote`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
+
+export interface OrderQuote {
+  subtotal: number;
+  originalTotal: number;
+  productDiscount: number;
+  couponDiscount: number;
+  couponCode: string | null;
+  couponLabel: string | null;
+  couponError: string | null;
+  platformDiscount: number;
+  deliveryCharge: number;
+  codFee: number;
+  taxAmount: number;
+  taxableAmount: number;
+  totalAmount: number;
+  deliveryLabel: string;
+  problems: string[];
+}
 
 // ─── PROFILE APIs ────────────────────────────────────────────────────────────
 

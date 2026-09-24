@@ -31,6 +31,7 @@ import {
   Palette,
   Mail,
   Repeat,
+  ShoppingBag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -170,6 +171,12 @@ export function AppSidebar({
       title: "Dashboard",
       href: "/dashboard",
       icon: LayoutDashboard,
+    },
+    {
+      title: "Online Orders",
+      href: "/online-orders",
+      icon: ShoppingBag,
+      requiredPermission: "online_orders:view",
     },
     {
       title: "Master Data",
@@ -358,6 +365,12 @@ export function AppSidebar({
       href: "/settings/email",
       icon: Mail,
       requiredPermission: "email_config:view",
+    },
+    {
+      title: "Online Store",
+      href: "/settings/online-store",
+      icon: ShoppingBag,
+      requiredPermission: "online_orders:view",
     },
   ],
 },

@@ -4,6 +4,7 @@
 import express from "express";
 import { db } from "../config/db.js";
 import { toAssetUrl } from "../utils/assetUrl.js";
+import { priceItem } from "../services/pricing.js";
 import { requireCustomer } from "../middleware/customerAuth.js";
 
 const router = express.Router();
@@ -59,13 +60,14 @@ async function fetchCartRows(customerId, table = "website_cart_items") {
     const image = toAssetUrl(row.primaryImage);
 
     // Use real item price; fall back to priceSnapshot if item price is 0
-    const itemOfferPrice = Number(row.itemOfferPrice) || 0;
-    const itemNlc = Number(row.itemNlc) || 0;
+    // Customer-facing (GST-inclusive) price + MRP from the Item Master
+    // (services/pricing.js). The snapshot is display-only; orders re-price
+    // every line on the server.
+    const priced = priceItem({ offerPrice: row.itemOfferPrice, nlc: row.itemNlc, gst: row.gst });
     const snapshot = Number(row.priceSnapshot) || 0;
 
-    const offerPrice = itemOfferPrice || snapshot;
-    // originalPrice = nlc if higher than offerPrice, else same as offerPrice
-    const originalPrice = itemNlc > offerPrice ? itemNlc : offerPrice;
+    const offerPrice = priced.sellingPrice || snapshot;
+    const originalPrice = priced.mrp > offerPrice ? priced.mrp : offerPrice;
 
     return {
       id: String(row.id),

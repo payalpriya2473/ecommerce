@@ -19,12 +19,13 @@ import {
   isLoggedIn,
   onCustomerAuthChange,
   type CustomerOrder,
+  type OrderQuote,
   type PaymentConfig,
   type PlaceOrderPayload,
 } from "@/lib/api/customerApi";
 import { loadRazorpayScript, openRazorpayCheckout } from "@/lib/payments/razorpay";
+import { useCoupons } from "@/lib/pricing/use-coupons";
 import {
-  COUPONS,
   DELIVERY_OPTIONS,
   clearCheckoutCoupon,
   computeOrderTotals,
@@ -242,10 +243,67 @@ export default function CheckoutPage() {
     [cartItems]
   );
 
-  const totals = useMemo(
+  // Coupons are managed in admin → Offers → Coupon.
+  const { coupons: COUPONS } = useCoupons();
+
+  // Instant client estimate (display) …
+  const localTotals = useMemo(
     () => computeOrderTotals(orderLines, { couponCode, deliveryType, paymentMethod }),
-    [orderLines, couponCode, deliveryType, paymentMethod]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orderLines, couponCode, deliveryType, paymentMethod, COUPONS]
   );
+
+  // … replaced by the server quote, which is exactly what the order is placed at.
+  const [serverQuote, setServerQuote] = useState<OrderQuote | null>(null);
+  const [quoteProblems, setQuoteProblems] = useState<string[]>([]);
+  useEffect(() => {
+    if (authState !== "member" || orderLines.length === 0) {
+      setServerQuote(null);
+      setQuoteProblems([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const res = await customerOrderAPI.quote({
+        items: orderLines.map((item) => ({
+          itemId: item.itemId ?? item.id,
+          qty: Number(item.qty) || 1,
+          colorName: item.colorName ?? null,
+        })),
+        couponCode,
+        deliveryType,
+        paymentMethod,
+      });
+      if (cancelled) return;
+      if (res.success && res.data) {
+        setServerQuote(res.data);
+        setQuoteProblems(res.data.problems || []);
+      } else {
+        setServerQuote(null);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [authState, orderLines, couponCode, deliveryType, paymentMethod]);
+
+  const totals = useMemo(() => {
+    if (!serverQuote) return localTotals;
+    return {
+      ...localTotals,
+      subtotal: serverQuote.subtotal,
+      originalTotal: serverQuote.originalTotal,
+      productDiscount: serverQuote.productDiscount,
+      couponDiscount: serverQuote.couponDiscount,
+      platformDiscount: serverQuote.platformDiscount,
+      deliveryCharge: serverQuote.deliveryCharge,
+      codFee: serverQuote.codFee,
+      tax: serverQuote.taxAmount,
+      total: serverQuote.totalAmount,
+      totalSaving: serverQuote.productDiscount + serverQuote.couponDiscount + serverQuote.platformDiscount,
+    };
+  }, [localTotals, serverQuote]);
 
   // ── Payment summary label ─────────────────────────────────────────────────
   const paymentDetail = useMemo(() => {
@@ -1317,7 +1375,7 @@ export default function CheckoutPage() {
                   </div>
                 )}
                 <div className="co-price-row">
-                  <span className="cpr-label">GST</span>
+                  <span className="cpr-label">GST (included)</span>
                   <span className="cpr-val">Rs {formatRupees(totals.tax)}</span>
                 </div>
                 <div className="co-price-row total">
@@ -1332,7 +1390,19 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {couponCode && COUPONS[couponCode] && (
+              {quoteProblems.length > 0 && (
+                <div className="co-coupon-note" style={{ color: "var(--danger, #dc2626)" }}>
+                  <i className="fas fa-triangle-exclamation" /> {quoteProblems.join(" · ")}
+                </div>
+              )}
+
+              {serverQuote?.couponError && (
+                <div className="co-coupon-note" style={{ color: "var(--danger, #dc2626)" }}>
+                  <i className="fas fa-ticket" /> {serverQuote.couponError}
+                </div>
+              )}
+
+              {couponCode && COUPONS[couponCode] && !serverQuote?.couponError && (
                 <div className="co-coupon-note">
                   <i className="fas fa-ticket" /> {COUPONS[couponCode].label} — applied from your cart
                 </div>
