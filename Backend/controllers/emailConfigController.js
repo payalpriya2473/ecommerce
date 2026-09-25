@@ -79,6 +79,10 @@ function buildTransportOptions(cfg) {
     port: Number(cfg.smtp_port),
     secure: security === "ssl",
     requireTLS: security === "tls",
+    // Fail fast instead of hanging for minutes when the SMTP server is unreachable.
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
     auth: {
       user: authUser,
       pass: cfg.smtp_password,
@@ -147,6 +151,9 @@ export const saveEmailConfig = async (req, res) => {
       smtp_secure: smtpSecure,
     });
 
+    // The row may be missing (fresh or truncated DB): an UPDATE alone would
+    // silently save nothing and every email would fail.
+    await pool.query("INSERT IGNORE INTO email_config (id) VALUES (1)");
     await pool.query(
       `UPDATE email_config SET
         smtp_host = ?, smtp_port = ?, smtp_secure = ?,
@@ -286,13 +293,44 @@ export const testEmailConfig = async (req, res) => {
 };
 
 // Helper: use this in other controllers to send emails
-export const sendEmail = async ({ to, subject, html, text, attachments, replyTo }) => {
-  const [rows] = await pool.query(
-    "SELECT * FROM email_config WHERE id = 1 AND is_active = 1",
-  );
-  if (!rows.length) throw new Error("Email configuration is not set up or not active");
+/**
+ * Current SMTP settings + a list of problems that would stop mail going out.
+ * Used by sendEmail and by the admin "email health" check.
+ */
+export async function getEmailConfigStatus() {
+  const [rows] = await pool.query("SELECT * FROM email_config WHERE id = 1");
+  const cfg = rows[0] || null;
+  const problems = [];
+  if (!cfg) problems.push("No SMTP settings saved. Open Settings → Email Config and save them.");
+  else {
+    if (!cfg.smtp_host) problems.push("SMTP host is empty.");
+    if (!cfg.smtp_port) problems.push("SMTP port is empty.");
+    if (!cfg.smtp_user && !cfg.from_email) problems.push("SMTP username is empty.");
+    if (!cfg.smtp_password) problems.push("SMTP password is empty.");
+    if (Number(cfg.is_active) !== 1) problems.push('Email sending is switched off — tick "Active" in Settings → Email Config.');
+  }
+  return { cfg, problems };
+}
 
-  const cfg = rows[0];
+/** Verify the SMTP login without sending anything. */
+export async function verifySmtp() {
+  const { cfg, problems } = await getEmailConfigStatus();
+  if (problems.length) return { ok: false, problems };
+  try {
+    await nodemailer.createTransport(buildTransportOptions(cfg)).verify();
+    return { ok: true, problems: [], server: `${cfg.smtp_host}:${cfg.smtp_port}`, from: cfg.from_email || cfg.smtp_user };
+  } catch (err) {
+    let message = err.message;
+    if (err.code === "EAUTH") message = `SMTP login failed (${err.response || err.message}). For Gmail use an App Password, not the normal password.`;
+    if (err.code === "ECONNECTION" || err.code === "ETIMEDOUT" || err.code === "ESOCKET")
+      message = `Cannot reach ${cfg.smtp_host}:${cfg.smtp_port} (${err.message}). Check host/port and that the server allows outgoing SMTP.`;
+    return { ok: false, problems: [message] };
+  }
+}
+
+export const sendEmail = async ({ to, subject, html, text, attachments, replyTo }) => {
+  const { cfg, problems } = await getEmailConfigStatus();
+  if (problems.length) throw new Error(problems.join(" "));
   const transporter = nodemailer.createTransport(buildTransportOptions(cfg));
 
   return transporter.sendMail({

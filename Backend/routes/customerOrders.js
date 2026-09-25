@@ -712,7 +712,19 @@ router.post("/", async (req, res) => {
     connection = null;
 
     const [order] = await loadOrders(customerId, { orderId, limit: 1 });
-    // COD orders are placed right away; online orders email after payment.
+    // Keep the customer's email on the order (used for all order emails).
+    await db
+      .query(
+        `UPDATE website_orders o JOIN website_customers c ON c.id = o.customerId
+            SET o.customerEmail = c.email
+          WHERE o.id = ? AND (o.customerEmail IS NULL OR o.customerEmail = '')`,
+        [orderId]
+      )
+      .catch((e) => {
+        if (e?.code !== "ER_BAD_FIELD_ERROR") console.error("[orders/POST] customerEmail snapshot:", e.message);
+      });
+    // COD orders are confirmed to the customer right away; online orders are
+    // emailed once Razorpay confirms the payment (orderPaymentService).
     if (isCod) notifyOrder(orderId, "placed");
 
     return ok(

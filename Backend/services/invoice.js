@@ -98,7 +98,7 @@ export function amountInWords(amount) {
 
 export async function buildInvoiceData(orderId) {
   const [[order]] = await db.query(
-    `SELECT o.*, c.email AS customerEmail, c.firstName AS customerFirstName, c.lastName AS customerLastName
+    `SELECT o.*, c.email AS accountEmail, c.firstName AS customerFirstName, c.lastName AS customerLastName
        FROM website_orders o LEFT JOIN website_customers c ON c.id = o.customerId
       WHERE o.id = ?`,
     [orderId]
@@ -197,7 +197,7 @@ export async function buildInvoiceData(orderId) {
     order,
     customer: {
       name: [order.customerFirstName, order.customerLastName].filter(Boolean).join(" ") || order.shipName || "",
-      email: order.customerEmail || "",
+      email: order.customerEmail || order.accountEmail || "",
     },
     lines,
     hsnSummary: [...summaryMap.values()],

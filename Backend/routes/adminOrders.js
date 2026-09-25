@@ -82,7 +82,7 @@ function mapAdminOrder(o) {
     refundMode: isPaidOnline(o) ? "razorpay" : "manual",
     invoiceNumber: o.invoiceNumber ?? null,
     invoiceDate: o.invoiceDate ?? null,
-    customerHasEmail: Boolean(o.customerEmail),
+    customerHasEmail: Boolean(o.customerEmail || o.accountEmail),
     deliveryType: o.deliveryType,
     deliveryLabel: o.deliveryLabel,
     couponCode: o.couponCode,
@@ -98,7 +98,7 @@ function mapAdminOrder(o) {
     customer: {
       id: o.customerId ? String(o.customerId) : null,
       name: [o.customerFirstName, o.customerLastName].filter(Boolean).join(" ") || o.shipName || "",
-      email: o.customerEmail || null,
+      email: o.customerEmail || o.accountEmail || null,
       phone: o.customerPhone || o.shipPhone || null,
     },
     address: {
@@ -129,7 +129,7 @@ function mapAdminOrder(o) {
 
 const ORDER_SELECT = `
   SELECT o.*, c.firstName AS customerFirstName, c.lastName AS customerLastName,
-         c.email AS customerEmail, c.phone AS customerPhone
+         c.email AS accountEmail, c.phone AS customerPhone
     FROM website_orders o
     LEFT JOIN website_customers c ON c.id = o.customerId`;
 
@@ -186,7 +186,7 @@ router.get("/", canView, async (req, res) => {
     );
     const [rows] = await db.query(
       `SELECT o.*, c.firstName AS customerFirstName, c.lastName AS customerLastName,
-              c.email AS customerEmail, c.phone AS customerPhone,
+              c.email AS accountEmail, c.phone AS customerPhone,
               (SELECT COALESCE(SUM(qty),0) FROM website_order_items i WHERE i.orderId = o.id) AS itemCount
          FROM website_orders o
          LEFT JOIN website_customers c ON c.id = o.customerId

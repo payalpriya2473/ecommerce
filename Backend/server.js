@@ -34,6 +34,10 @@ import customerProfileRouter from "./routes/customerProfile.js";
 import customerOrdersRouter  from "./routes/customerOrders.js";
 import adminOrdersRouter     from "./routes/adminOrders.js";
 import adminStoreSettingsRouter from "./routes/adminStoreSettings.js";
+import reportRoutes from "./routes/reportRoutes.js";
+import analyticsRoutes from "./routes/analyticsRoutes.js";
+import { startOrderEmailRetryWorker } from "./services/orderNotifications.js";
+import { verifySmtp } from "./controllers/emailConfigController.js";
 import contactRouter         from "./routes/contactRoutes.js";
 import customerPaymentsRouter from "./routes/customerPayments.js";
 import razorpayWebhookRouter from "./routes/razorpayWebhook.js";
@@ -145,6 +149,7 @@ router.get("/", (req, res) => {
       technicians: "/api/technicians",
       purchaseInvoices: "/api/purchase-invoices",
       incentiveLogs: "/api/incentive-logs",
+      reports: "/api/reports",
       // Temporarily disabled: Colour Master API endpoint.
       // colors: "/api/colors",
     }
@@ -227,6 +232,8 @@ router.use("/api/customer/profile",  customerProfileRouter);
 router.use("/api/customer/orders",   customerOrdersRouter);
 router.use("/api/admin/orders",      adminOrdersRouter);
 router.use("/api/admin/store-settings", adminStoreSettingsRouter);
+router.use("/api/reports",            reportRoutes);
+router.use("/api/analytics",          analyticsRoutes);
 router.use("/api/customer/payments", customerPaymentsRouter);
 router.use("/api/contact",           contactRouter);
 
@@ -270,6 +277,11 @@ const server = app.listen(PORT, () => {
   console.log(` Frontend: ${FRONTEND_URL}`);
   console.log(` Health check: http://localhost:${PORT}/api/health`);
   console.log('='.repeat(50));
+  // Order emails: retry failed sends automatically, and report SMTP problems at startup.
+  startOrderEmailRetryWorker();
+  verifySmtp()
+    .then((r) => console.log(r.ok ? ` Order emails: SMTP OK (${r.server}, from ${r.from})` : ` Order emails WILL NOT SEND: ${r.problems.join(' ')}`))
+    .catch((e) => console.warn(' Order emails: SMTP check skipped —', e.message));
 });
 
 server.on("error", (err) => {

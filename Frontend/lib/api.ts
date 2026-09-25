@@ -2849,7 +2849,35 @@ export const onlineOrderAPI = {
     onlineOrderRequest(token, `/${id}/notes`, { method: 'PUT', body: JSON.stringify({ adminNotes }) }),
 };
 
+export interface EmailHealth {
+  ok: boolean;
+  checks: { key: string; label: string; ok: boolean; detail: string; fix: string | null }[];
+  recent: {
+    id: number;
+    orderId: number;
+    orderNumber: string | null;
+    event: string;
+    audience: string;
+    recipient: string | null;
+    status: 'sent' | 'failed' | 'skipped';
+    error: string | null;
+    createdAt: string;
+  }[];
+}
+
 export const onlineStoreSettingsAPI = {
+  emailHealth: async (token: string): Promise<{ success: boolean; data?: EmailHealth; message?: string }> => {
+    const res = await fetch(`${API_BASE_URL}/admin/store-settings/email-health`, { headers: { Authorization: `Bearer ${token}` } });
+    return parseApiResponse(res);
+  },
+  sendTestEmail: async (token: string, to: string) => {
+    const res = await fetch(`${API_BASE_URL}/admin/store-settings/email-test`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to }),
+    });
+    return parseApiResponse(res);
+  },
   get: async (token: string) => {
     const res = await fetch(`${API_BASE_URL}/admin/store-settings`, { headers: { Authorization: `Bearer ${token}` } });
     return parseApiResponse(res);
@@ -2859,6 +2887,165 @@ export const onlineStoreSettingsAPI = {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
+    });
+    return parseApiResponse(res);
+  },
+};
+
+// ─── Reports ────────────────────────────────────────────────────────────────
+
+export type ReportColumnType = 'text' | 'number' | 'currency' | 'date' | 'datetime' | 'percent' | 'badge';
+
+export interface ReportColumn {
+  key: string;
+  label: string;
+  type: ReportColumnType;
+  sortable?: boolean;
+  total?: boolean;
+  width?: number;
+}
+
+export interface ReportResponse<Row = Record<string, unknown>> {
+  success: boolean;
+  message?: string;
+  data: Row[];
+  columns: ReportColumn[];
+  summary: Record<string, number>;
+  filters: Record<string, unknown>;
+  pagination: {
+    page: number;
+    limit: number;
+    totalItems: number;
+    totalPages: number;
+    sortKey: string | null;
+    sortDirection: 'asc' | 'desc';
+  };
+  extra?: Record<string, any> | null;
+  meta?: { views?: Record<string, { label: string }> | null; tookMs?: number };
+}
+
+export interface ReportFilterOptions {
+  categories: { id: number; name: string }[];
+  brands: { id: number; name: string }[];
+  itemGroups: { id: number; name: string; categoryId: number | null }[];
+  salesmen: { id: number; name: string }[];
+  suppliers?: { id: number; name: string }[];
+  paymentModes: string[];
+}
+
+export type ReportParams = Record<string, string | number | undefined | null>;
+
+/** "sales" → /reports/sales; a path such as "analytics/procurement" is used as-is. */
+const reportPath = (reportKey: string) => (reportKey.includes('/') ? reportKey : `reports/${reportKey}`);
+
+function reportQuery(params: ReportParams) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '' && value !== 'all') qs.append(key, String(value));
+  });
+  return qs.toString();
+}
+
+export const reportAPI = {
+  run: async <Row = Record<string, unknown>>(
+    token: string,
+    reportKey: string,
+    params: ReportParams,
+    signal?: AbortSignal,
+  ): Promise<ReportResponse<Row>> => {
+    const qs = reportQuery(params);
+    const res = await fetch(`${API_BASE_URL}/${reportPath(reportKey)}${qs ? `?${qs}` : ''}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
+    return parseApiResponse(res);
+  },
+
+  filters: async (
+    token: string,
+    source: 'reports' | 'analytics' = 'reports',
+  ): Promise<{ success: boolean; data?: ReportFilterOptions; message?: string }> => {
+    const res = await fetch(`${API_BASE_URL}/${source}/filters`, { headers: { Authorization: `Bearer ${token}` } });
+    return parseApiResponse(res);
+  },
+
+  /** Download the full report (all pages) as xlsx / csv. */
+  export: async (
+    token: string,
+    reportKey: string,
+    params: ReportParams,
+    format: 'xlsx' | 'csv' = 'xlsx',
+  ): Promise<{ success: boolean; message?: string }> => {
+    const qs = reportQuery({ ...params, page: undefined, limit: undefined, export: format });
+    const res = await fetch(`${API_BASE_URL}/${reportPath(reportKey)}?${qs}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const type = res.headers.get('content-type') || '';
+    if (!res.ok || type.includes('application/json')) {
+      const payload = await parseApiResponse(res);
+      return { success: false, message: payload?.message || 'Export failed' };
+    }
+    const filename =
+      /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '')?.[1] ||
+      `${reportKey.split('/').pop()}-report.${format}`;
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    return { success: true };
+  },
+};
+
+// ─── Analytics ──────────────────────────────────────────────────────────────
+
+export interface AnalyticsKpi {
+  value: number;
+  previous: number;
+  changePct: number | null;
+}
+
+export interface AnalyticsNamedValue {
+  id?: number | string | null;
+  name: string;
+  value: number;
+  qty?: number | null;
+  bills?: number | null;
+}
+
+export interface SalesOverview {
+  period: { from: string; to: string; days: number; granularity: 'day' | 'month' };
+  previousPeriod: { from: string; to: string };
+  channel: string;
+  headline: Record<'today' | 'month' | 'financialYear', { net: number; bills: number; from: string; to: string }>;
+  kpis: Record<
+    'net' | 'bills' | 'qty' | 'avgBill' | 'gst' | 'discount' | 'customers' | 'showroomNet' | 'websiteNet',
+    AnalyticsKpi
+  >;
+  goodsValue: number;
+  trend: { period: string; showroom: number; website: number; total: number; bills: number }[];
+  byCategory: AnalyticsNamedValue[];
+  byBrand: AnalyticsNamedValue[];
+  topItems: AnalyticsNamedValue[];
+  topSalesmen: AnalyticsNamedValue[];
+  topCities: AnalyticsNamedValue[];
+  byPaymentMode: AnalyticsNamedValue[];
+  byWeekday: { day: string; value: number; bills: number }[];
+}
+
+export const analyticsAPI = {
+  overview: async (
+    token: string,
+    params: ReportParams,
+    signal?: AbortSignal,
+  ): Promise<{ success: boolean; data?: SalesOverview; message?: string }> => {
+    const qs = reportQuery(params);
+    const res = await fetch(`${API_BASE_URL}/analytics/overview${qs ? `?${qs}` : ''}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
     });
     return parseApiResponse(res);
   },

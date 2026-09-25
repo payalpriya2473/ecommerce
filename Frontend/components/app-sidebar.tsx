@@ -74,7 +74,7 @@ export function AppSidebar({
     isSuperAdmin,
   } = usePermissions();
 
-  const parentMenus = ["Master Data", "Transaction", "Settings"];
+  const parentMenus = ["Master Data", "Transaction", "Settings", "Reports", "Analytics"];
 
   useEffect(() => {
     const role = sessionStorage.getItem("userRole") || "";
@@ -119,6 +119,10 @@ export function AppSidebar({
         }
       } else if (pathParts.includes("settings")) {
         setOpenMenus({ Settings: true });
+      } else if (pathParts.includes("reports")) {
+        setOpenMenus({ Reports: true });
+      } else if (pathParts.includes("analytics")) {
+        setOpenMenus({ Analytics: true });
       }
     }
   }, [pathname]);
@@ -135,7 +139,10 @@ export function AppSidebar({
       if (depth === 0) {
         // Close all top-level parents except the one being toggled
         const newState: Record<string, boolean> = {};
-        parentMenus.forEach((menu) => {
+        // Every top-level group (derived from the menu, so new groups like
+        // Reports work without being listed anywhere else).
+        const topLevel = new Set([...parentMenus, ...menuItems.filter((m) => m.children?.length).map((m) => m.title)]);
+        topLevel.forEach((menu) => {
           newState[menu] = menu === title ? !prev[menu] : false;
         });
         return newState;
@@ -376,17 +383,39 @@ export function AppSidebar({
 },
     {
       title: "Reports",
-      href: "/reports",
       icon: FileText,
-      requiredPermission: "reports:read",
-      disabled: true,
+      children: [
+        {
+          title: "Sales Report",
+          href: "/reports/sales",
+          icon: BarChart3,
+          requiredPermission: "reports:view",
+        },
+        {
+          title: "Item Report",
+          href: "/reports/items",
+          icon: Package2,
+          requiredPermission: "reports:view",
+        },
+      ],
     },
     {
       title: "Analytics",
-      href: "/analytics",
       icon: BarChart3,
-      requiredPermission: "analytics:read",
-      disabled: true,
+      children: [
+        {
+          title: "Sales Overview",
+          href: "/analytics",
+          icon: TrendingUp,
+          requiredPermission: "analytics:view",
+        },
+        {
+          title: "Future Procurement",
+          href: "/analytics/procurement",
+          icon: Package,
+          requiredPermission: "analytics:view",
+        },
+      ],
     },
   ];
 

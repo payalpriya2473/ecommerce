@@ -38,6 +38,7 @@ const PERMISSION_DEFS = [
   // ['finance_companies', FULL],
   ['live_stock',        FULL],
   ['online_orders',     ['view', 'edit']],
+  ['analytics',         ['view']],
 ];
 
 const ACTION_LABEL = { view: 'View', create: 'Create', edit: 'Edit', update: 'Edit', delete: 'Delete' };

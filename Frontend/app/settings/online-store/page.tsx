@@ -13,6 +13,7 @@ import { AlertCircle, CheckCircle2, FileText, Mail, Save, Store } from "lucide-r
 import { onlineStoreSettingsAPI, type OnlineStoreSettings } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { INDIAN_STATES } from "@/lib/indian-states";
+import { EmailHealthCard } from "./EmailHealthCard";
 
 const EMPTY: OnlineStoreSettings = {
   legalName: "",
@@ -143,6 +144,8 @@ export default function OnlineStoreSettingsPage() {
             </div>
           ) : (
             <div className="space-y-6">
+              <EmailHealthCard canEdit={canEdit} />
+
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
